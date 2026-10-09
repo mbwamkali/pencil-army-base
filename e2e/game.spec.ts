@@ -129,6 +129,16 @@ test("held upright, the game asks the player to turn the phone", async ({ page }
   await expect(page.locator("#rotate")).toBeHidden();
 });
 
+test("the game keeps a margin from the screen edges so rounded phone corners do not cut it off", async ({ page }) => {
+  await page.goto("/");
+  const box = await page.locator("#stage").boundingBox();
+  const size = page.viewportSize()!;
+  expect(box!.x).toBeGreaterThanOrEqual(15.5);
+  expect(box!.y).toBeGreaterThanOrEqual(15.5);
+  expect(size.width - (box!.x + box!.width)).toBeGreaterThanOrEqual(15.5);
+  expect(size.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(15.5);
+});
+
 test("buttons are big enough for a thumb and nothing overflows the screen", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);

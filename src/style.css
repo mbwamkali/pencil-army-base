@@ -105,7 +105,7 @@ h2 {
 .btn {
   font: inherit;
   font-size: 22px;
-  min-height: 48px;
+  min-height: 52px;
   padding: 6px 22px;
   border: 2px solid var(--ink);
   border-radius: 12px;
@@ -388,7 +388,7 @@ h2 {
   flex: 1;
   font: inherit;
   font-size: 15px;
-  min-height: 48px;
+  min-height: 52px;
   padding: 0 2px;
   border: 2px solid var(--ink);
   background: #fff;
