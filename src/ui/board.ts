@@ -125,16 +125,14 @@ export function createBoard(opts: { sq?: number; tint: "own" | "target"; label?:
   };
 }
 
-/** A circle that shows the squares under the finger, drawn above the aim point (below it near the top edge). */
+/** One circle centered on the aim point: a zoomed view of the squares under it, with the shot ring and crosshair on top. */
 export function drawMagnifier(board: Board, ax: number, ay: number): void {
   const { sq, overlay } = board;
-  const radius = 56;
   const zoom = 1.6;
-  const px = ax * sq;
-  const py = ay * sq;
-  const above = py - 40 - radius > 4;
-  const cy = above ? py - 40 - radius : py + 40 + radius;
-  const cx = Math.max(radius + 4, Math.min(GRID_W * sq - radius - 4, px));
+  const shotRadius = 0.875 * sq * zoom;
+  const radius = shotRadius + 8;
+  const cx = ax * sq;
+  const cy = ay * sq;
   const clipId = `${board.worldId}-lens`;
   overlay.append(
     sv("clipPath", { id: clipId }, sv("circle", { cx, cy, r: radius })),
@@ -143,8 +141,8 @@ export function drawMagnifier(board: Board, ax: number, ay: number): void {
       "g",
       { "clip-path": `url(#${clipId})` },
       sv("rect", { x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2, class: "lens-paper" }),
-      sv("use", { href: `#${board.worldId}`, transform: `translate(${cx} ${cy}) scale(${zoom}) translate(${-px} ${-py})` }),
-      sv("circle", { cx, cy, r: 0.875 * sq * zoom, class: "lens-shot" }),
+      sv("use", { href: `#${board.worldId}`, transform: `translate(${cx} ${cy}) scale(${zoom}) translate(${-cx} ${-cy})` }),
+      sv("circle", { cx, cy, r: shotRadius, class: "lens-shot" }),
       sv("path", { d: `M${cx - radius} ${cy}H${cx + radius}M${cx} ${cy - radius}V${cy + radius}`, class: "lens-cross" }),
     ),
   );

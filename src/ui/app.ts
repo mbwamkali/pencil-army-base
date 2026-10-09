@@ -32,7 +32,6 @@ import {
   createBoard,
   drawMagnifier,
   drawShot,
-  drawShotImage,
   drawUnit,
   type Board,
 } from "./board.ts";
@@ -491,7 +490,6 @@ function battleScreen(game: Game): HTMLElement {
   const drawAim = () => {
     board.overlay.replaceChildren();
     if (!ui.aim) return;
-    drawShotImage(board.overlay, "shot-aim", ui.aim.x, ui.aim.y, SQ);
     drawMagnifier(board, ui.aim.x, ui.aim.y);
     warning.textContent = isRepeatOfMiss(game, me, ui.aim.x, ui.aim.y) ? "That spot was empty last time." : "";
     if (fireButton) fireButton.disabled = false;

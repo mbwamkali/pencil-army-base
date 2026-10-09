@@ -60,7 +60,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     body: [
       "Tap Start on the black screen. You'll see your own base, with your opponent's last shot marked.",
       "Flip the switch to Target to see your opponent's base. It looks like blank paper, apart from the results of your earlier shots.",
-      "Tap where you want to aim. A crosshair and a magnifier appear, and you can drag to adjust. Then tap Fire. You get one shot per turn.",
+      "Tap where you want to aim. A magnifier ring with a crosshair appears on the spot, and you can drag to adjust. Then tap Fire. You get one shot per turn.",
       "See the result straight away. Flip back to My base if you want to look again. Tap End turn and pass the phone.",
     ],
   },
