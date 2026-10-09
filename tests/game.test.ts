@@ -3,6 +3,8 @@ import {
   DEFAULT_NAMES,
   confirmHandoff,
   createGame,
+  nextDefaultName,
+  randomDefaultNames,
   endTurn,
   finishBuild,
   fire,
@@ -258,5 +260,25 @@ describe("random layout", () => {
   it("replaces what was already placed", () => {
     const g = ok(placeUnit(createGame({ seed: 3 }), 0, "tank-1", 0, 0)).game;
     expect(randomLayout(g, 0).players[0].units).toHaveLength(17);
+  });
+});
+
+describe("default player names", () => {
+  it("starts the setup screen with two different pencil names", () => {
+    for (let i = 0; i < 50; i++) {
+      const [a, b] = randomDefaultNames(Math.random);
+      expect(DEFAULT_NAMES).toContain(a);
+      expect(DEFAULT_NAMES).toContain(b);
+      expect(a).not.toBe(b);
+    }
+  });
+
+  it("shuffles to a name that is neither the current one nor the other player's", () => {
+    for (let i = 0; i < 100; i++) {
+      const next = nextDefaultName("General Graphite", "Colonel Eraser", Math.random);
+      expect(DEFAULT_NAMES).toContain(next);
+      expect(next).not.toBe("General Graphite");
+      expect(next).not.toBe("Colonel Eraser");
+    }
   });
 });

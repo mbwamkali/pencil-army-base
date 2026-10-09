@@ -79,6 +79,18 @@ export function createGame(opts: { seed: number; names?: [string?, string?] }): 
   };
 }
 
+/** Two different pencil names to start the setup screen with. `random` returns a number from 0 up to (not including) 1. */
+export function randomDefaultNames(random: () => number): [string, string] {
+  const first = DEFAULT_NAMES[Math.floor(random() * DEFAULT_NAMES.length)] as string;
+  return [first, nextDefaultName(first, first, random)];
+}
+
+/** Another pencil name that is neither the current one nor the other player's. */
+export function nextDefaultName(current: string, other: string, random: () => number): string {
+  const choices = DEFAULT_NAMES.filter((n) => n !== current && n !== other);
+  return choices[Math.floor(random() * choices.length)] as string;
+}
+
 export function setName(game: Game, player: PlayerIndex, name: string): Game {
   const g = clone(game);
   const fallback = DEFAULT_NAMES.find((n) => !g.players.some((p, i) => i !== player && p.name === n));

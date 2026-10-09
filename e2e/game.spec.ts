@@ -11,6 +11,26 @@ test("the menu opens How to play and explains that walls don't count", async ({ 
   await expect(page.getByTestId("menu")).toBeVisible();
 });
 
+test("setup shows two different pencil names already filled in, and Shuffle changes one without typing", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("new-game").click();
+  const one = page.getByTestId("name-1");
+  const two = page.getByTestId("name-2");
+  await expect(one).not.toHaveValue("");
+  await expect(two).not.toHaveValue("");
+  expect(await one.inputValue()).not.toBe(await two.inputValue());
+  for (let i = 0; i < 5; i++) {
+    const before = await one.inputValue();
+    await page.getByTestId("shuffle-1").click();
+    await expect(one).not.toHaveValue(before);
+    expect(await one.inputValue()).not.toBe(await two.inputValue());
+  }
+  const keep = await two.inputValue();
+  await page.getByTestId("start-game").click();
+  const names = (await savedGame(page)).players.map((p) => p.name);
+  expect(names[1]).toBe(keep);
+});
+
 test("names default to two different pencil officers and typed names are kept", async ({ page }) => {
   await startNewGame(page, 3);
   const first = (await savedGame(page)).players.map((p) => p.name);
