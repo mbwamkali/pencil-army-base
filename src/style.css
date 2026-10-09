@@ -105,7 +105,7 @@ h2 {
 .btn {
   font: inherit;
   font-size: 22px;
-  min-height: 48px;
+  min-height: 52px;
   padding: 6px 22px;
   border: 2px solid var(--ink);
   border-radius: 12px;
@@ -148,7 +148,7 @@ h2 {
   gap: 24px;
 }
 
-.setup-row label {
+.setup-row .name-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -156,10 +156,20 @@ h2 {
   text-align: left;
 }
 
+.name-row {
+  display: flex;
+  gap: 8px;
+}
+
+.shuffle {
+  font-size: 20px;
+  padding: 4px 14px;
+}
+
 .name-input {
   font: inherit;
   font-size: 24px;
-  width: 300px;
+  width: 250px;
   min-height: 48px;
   padding: 4px 12px;
   border: 2px solid var(--ink);
@@ -388,7 +398,7 @@ h2 {
   flex: 1;
   font: inherit;
   font-size: 15px;
-  min-height: 48px;
+  min-height: 52px;
   padding: 0 2px;
   border: 2px solid var(--ink);
   background: #fff;

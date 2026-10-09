@@ -8,6 +8,8 @@ import {
 import {
   confirmHandoff,
   createGame,
+  nextDefaultName,
+  randomDefaultNames,
   endTurn,
   finishBuild,
   fire,
@@ -155,7 +157,7 @@ function menuScreen(): HTMLElement {
           "data-testid": "new-game",
           onclick: () => {
             goFullscreen();
-            ui.names = ["", ""];
+            ui.names = randomDefaultNames(Math.random);
             ui.screen = "setup";
             render();
           },
@@ -204,23 +206,46 @@ function howToScreen(): HTMLElement {
 }
 
 function setupScreen(): HTMLElement {
-  const input = (i: 0 | 1) =>
-    el("input", {
-      class: "name-input",
-      type: "text",
-      maxlength: 20,
-      placeholder: "Random pencil officer",
-      value: ui.names[i],
-      "data-testid": `name-${i + 1}`,
-      "aria-label": `Player ${i + 1} name`,
-      oninput: (e: Event) => (ui.names[i] = (e.target as HTMLInputElement).value),
-    });
+  const field = (i: 0 | 1) =>
+    el(
+      "div",
+      { class: "name-field" },
+      el("label", { for: `name-${i + 1}` }, `Player ${i + 1}`),
+      el(
+        "div",
+        { class: "name-row" },
+        el("input", {
+          id: `name-${i + 1}`,
+          class: "name-input",
+          type: "text",
+          maxlength: 20,
+          placeholder: "Random pencil officer",
+          value: ui.names[i],
+          "data-testid": `name-${i + 1}`,
+          "aria-label": `Player ${i + 1} name`,
+          oninput: (e: Event) => (ui.names[i] = (e.target as HTMLInputElement).value),
+        }),
+        el(
+          "button",
+          {
+            class: "btn shuffle",
+            "data-testid": `shuffle-${i + 1}`,
+            "aria-label": `Pick another name for player ${i + 1}`,
+            onclick: () => {
+              ui.names[i] = nextDefaultName(ui.names[i], ui.names[i === 0 ? 1 : 0], Math.random);
+              render();
+            },
+          },
+          "Shuffle",
+        ),
+      ),
+    );
   return el(
     "div",
     { class: "screen center", "data-testid": "setup" },
     el("h2", {}, "Who's playing?"),
-    el("p", { class: "subtitle" }, "Type a name, or leave it blank and the game picks one. Who shoots first is chosen at random."),
-    el("div", { class: "setup-row" }, el("label", {}, "Player 1", input(0)), el("label", {}, "Player 2", input(1))),
+    el("p", { class: "subtitle" }, "Tap Shuffle for a different name, or type your own. Who shoots first is chosen at random."),
+    el("div", { class: "setup-row" }, field(0), field(1)),
     el(
       "div",
       { class: "menu-buttons row" },
@@ -660,7 +685,7 @@ function gameOverScreen(game: Game): HTMLElement {
           onclick: () => {
             clearGame();
             ui.game = null;
-            ui.names = ["", ""];
+            ui.names = randomDefaultNames(Math.random);
             ui.screen = "setup";
             render();
           },
