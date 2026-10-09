@@ -1,0 +1,353 @@
+{
+ "record": {
+  "seed": 12,
+  "layouts": [
+   [
+    {
+     "id": "fort-1",
+     "x": 8,
+     "y": 3
+    },
+    {
+     "id": "wall-1",
+     "x": 7,
+     "y": 3,
+     "upright": true
+    },
+    {
+     "id": "wall-2",
+     "x": 11,
+     "y": 4,
+     "upright": true
+    },
+    {
+     "id": "wall-3",
+     "x": 8,
+     "y": 2
+    },
+    {
+     "id": "wall-4",
+     "x": 9,
+     "y": 6
+    },
+    {
+     "id": "tank-1",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "tank-2",
+     "x": 14,
+     "y": 0
+    },
+    {
+     "id": "tank-3",
+     "x": 16,
+     "y": 7
+    },
+    {
+     "id": "artillery-1",
+     "x": 2,
+     "y": 7
+    },
+    {
+     "id": "artillery-2",
+     "x": 5,
+     "y": 0
+    },
+    {
+     "id": "artillery-3",
+     "x": 13,
+     "y": 8
+    },
+    {
+     "id": "infantry-1",
+     "x": 18,
+     "y": 0
+    },
+    {
+     "id": "infantry-2",
+     "x": 18,
+     "y": 4
+    },
+    {
+     "id": "infantry-3",
+     "x": 15,
+     "y": 4
+    },
+    {
+     "id": "infantry-4",
+     "x": 3,
+     "y": 4
+    },
+    {
+     "id": "infantry-5",
+     "x": 12,
+     "y": 1
+    },
+    {
+     "id": "infantry-6",
+     "x": 0,
+     "y": 9
+    }
+   ],
+   [
+    {
+     "id": "fort-1",
+     "x": 3,
+     "y": 5
+    },
+    {
+     "id": "wall-1",
+     "x": 2,
+     "y": 6,
+     "upright": true
+    },
+    {
+     "id": "wall-2",
+     "x": 6,
+     "y": 5,
+     "upright": true
+    },
+    {
+     "id": "wall-3",
+     "x": 4,
+     "y": 4
+    },
+    {
+     "id": "wall-4",
+     "x": 14,
+     "y": 9
+    },
+    {
+     "id": "tank-1",
+     "x": 10,
+     "y": 0
+    },
+    {
+     "id": "tank-2",
+     "x": 17,
+     "y": 2
+    },
+    {
+     "id": "tank-3",
+     "x": 9,
+     "y": 6
+    },
+    {
+     "id": "artillery-1",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "artillery-2",
+     "x": 13,
+     "y": 3
+    },
+    {
+     "id": "artillery-3",
+     "x": 17,
+     "y": 7
+    },
+    {
+     "id": "infantry-1",
+     "x": 6,
+     "y": 1
+    },
+    {
+     "id": "infantry-2",
+     "x": 8,
+     "y": 9
+    },
+    {
+     "id": "infantry-3",
+     "x": 12,
+     "y": 6
+    },
+    {
+     "id": "infantry-4",
+     "x": 19,
+     "y": 0
+    },
+    {
+     "id": "infantry-5",
+     "x": 15,
+     "y": 5
+    },
+    {
+     "id": "infantry-6",
+     "x": 11,
+     "y": 8
+    }
+   ]
+  ],
+  "shots": [
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 4.5,
+    "y": 6.5
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 4.5,
+    "y": 6.5
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 11,
+    "y": 1
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 18,
+    "y": 3
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 10,
+    "y": 7
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 1,
+    "y": 1
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 14,
+    "y": 4
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 18,
+    "y": 8
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 6.5,
+    "y": 1.5
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 8.5,
+    "y": 9.5
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 12.5,
+    "y": 6.5
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 19.5,
+    "y": 0.5
+   },
+   {
+    "x": 4.5,
+    "y": 9.5
+   },
+   {
+    "x": 15.5,
+    "y": 5.5
+   },
+   {
+    "x": 7.5,
+    "y": 7.5
+   },
+   {
+    "x": 11.5,
+    "y": 8.5
+   }
+  ]
+ },
+ "expected": {
+  "firstShooter": 1,
+  "winner": 0,
+  "turns": 28,
+  "shots": 28,
+  "outcomes": [
+   "destroyed",
+   "damaged",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed",
+   "miss",
+   "destroyed"
+  ],
+  "destroyedInOrder": [
+   "artillery-1",
+   "fort-1",
+   "tank-1",
+   "tank-2",
+   "tank-3",
+   "artillery-1",
+   "artillery-2",
+   "artillery-3",
+   "infantry-1",
+   "infantry-2",
+   "infantry-3",
+   "infantry-4",
+   "infantry-5",
+   "infantry-6"
+  ],
+  "loserFightingLeft": 0,
+  "loserWallsLeft": 4
+ }
+}
