@@ -17,3 +17,10 @@ window.addEventListener("resize", fit);
 window.addEventListener("orientationchange", fit);
 fit();
 render();
+
+// Offline play: the service worker is written at build time (see vite.config.ts), so it exists only in the built game.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}

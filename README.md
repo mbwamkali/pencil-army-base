@@ -15,3 +15,7 @@ npm run build         # production build in dist/
 
 The game rules live in `src/rules/` and know nothing about the screen; the screens are in `src/ui/`.
 `node scripts/make-golden.ts` regenerates the golden game fixtures; only run it when the rules change on purpose.
+
+## Offline play and install
+
+`npm run build` also writes `dist/sw.js`, a service worker listing every built file, so the game works offline after the first visit. `public/manifest.webmanifest` lets Chrome install it to the home screen as a fullscreen, landscape app. Try it locally with `npm run build && npm run preview`.
