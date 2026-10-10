@@ -30,6 +30,16 @@ android {
             keyAlias "test"
             keyPassword "android"
         }
+        // The Play Store upload key. GitHub Actions decodes it from the repo's secrets; it is never in the repo.
+        // Google re-signs the app with its own key (Play App Signing).
+        if (System.getenv("ANDROID_UPLOAD_KEYSTORE_FILE")) {
+            upload {
+                storeFile file(System.getenv("ANDROID_UPLOAD_KEYSTORE_FILE"))
+                storePassword System.getenv("ANDROID_UPLOAD_PASSWORD")
+                keyAlias "upload"
+                keyPassword System.getenv("ANDROID_UPLOAD_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
@@ -39,6 +49,7 @@ android {
             signingConfig signingConfigs.test
         }
         release {
+            if (System.getenv("ANDROID_UPLOAD_KEYSTORE_FILE")) signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
