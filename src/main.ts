@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { applySettings } from "./ui/settings.ts";
 import "@fontsource/patrick-hand";
 import "./style.css";
@@ -51,7 +52,8 @@ applySettings();
 render();
 
 // Offline play: the service worker is written at build time (see vite.config.ts), so it exists only in the built game.
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+// The Android app already carries every file inside it, so it skips the service worker.
+if (import.meta.env.PROD && "serviceWorker" in navigator && !Capacitor.isNativePlatform()) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   });
