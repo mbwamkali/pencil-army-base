@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+// The app shows the same version as the website, taken from package.json.
+def webVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+
 android {
     namespace = "com.mbwamkali.pencilarmybase"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -9,7 +12,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Test builds made by GitHub Actions number themselves from the run, so each one installs over the last.
         versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1") as Integer)
-        versionName "1.0"
+        versionName webVersion
+        manifestPlaceholders = [appLabel: "Pencil Army Base"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -31,6 +35,7 @@ android {
         debug {
             // Test builds get their own ID, so they can sit beside the Play Store app on the same phone.
             applicationIdSuffix ".test"
+            manifestPlaceholders = [appLabel: "Pencil Army Test"]
             signingConfig signingConfigs.test
         }
         release {

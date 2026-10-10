@@ -18,5 +18,7 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <!-- Android 12 and later show the app icon on this paper colour while the game loads. -->
+        <item name="windowSplashScreenBackground">#fbfaf4</item>
     </style>
 </resources>
