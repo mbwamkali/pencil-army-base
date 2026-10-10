@@ -129,11 +129,11 @@ describe("turn flow", () => {
 });
 
 describe("winning", () => {
-  /** Player A shoots every fighting unit dead while B fires at an empty spot. */
+  /** Player A destroys the fort, every tank and every artillery (infantry are optional) while B fires at an empty spot. */
   function playToTheEnd(g0: Game) {
     let g = g0;
     const winner = g.current;
-    const targets = LAYOUT_A.filter((p) => !p.id.startsWith("wall")).map((p) => p.id);
+    const targets = LAYOUT_A.filter((p) => !p.id.startsWith("wall") && !p.id.startsWith("infantry")).map((p) => p.id);
     const counters: number[] = [];
     let missTurns = 0;
     for (const id of targets) {
@@ -161,15 +161,16 @@ describe("winning", () => {
     return { g, winner, counters, missTurns };
   }
 
-  it("ends the game the moment the last fighting unit goes, with walls still standing", () => {
+  it("ends the game the moment the fort, tanks and artillery are gone, with infantry and walls still standing", () => {
     const { g, winner, counters } = playToTheEnd(gameInBattle());
     expect(g.phase).toBe("over");
     expect(g.winner).toBe(winner);
     const loser = winner === 0 ? 1 : 0;
     const left = unitsLeft(g.players[loser].units);
-    expect(left.total).toBe(0);
+    expect(left.total).toBe(left.byType.infantry);
+    expect(left.byType.infantry).toBeGreaterThan(0);
     expect(left.wallsLeft).toBeGreaterThan(0);
-    expect(counters.at(-1)).toBe(0);
+    expect(counters.at(-1)).toBe(left.byType.infantry);
     // the counter only ever goes down, one fighting unit at a time
     for (let i = 1; i < counters.length; i++) expect(counters[i - 1]! - counters[i]!).toBeLessThanOrEqual(1);
   });
@@ -183,7 +184,7 @@ describe("winning", () => {
   it("counts hit rate as shots that destroyed at least one unit", () => {
     const { g, winner } = playToTheEnd(gameInBattle());
     const stats = shotStats(g.players[winner]);
-    expect(stats.shots).toBeGreaterThanOrEqual(14);
+    expect(stats.shots).toBeGreaterThanOrEqual(8);
     expect(stats.hits).toBeLessThan(stats.shots); // the fort's first hit only damages
     expect(shotStats(g.players[winner === 0 ? 1 : 0]).hits).toBe(0);
   });

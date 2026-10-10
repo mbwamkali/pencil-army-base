@@ -43,7 +43,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Game modes",
     body: [
-      "Pick a mode when you start a game. Skirmish (the default) is a small army on a small board. Battle is the full army on the full board. Siege is the full army, but you only need to destroy the fort, tanks and artillery. Score attack is the full army with 20 shots each, and the most points wins.",
+      "Pick a mode when you start a game. Skirmish (the default) is a small army on a small board. Battle is the full army on the full board. Siege is the full army too, but infantry only score points. Score attack is the full army with 20 shots each, and the most points wins.",
     ],
   },
   {
@@ -88,7 +88,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Winning",
     body: [
-      "Battle: the first player to destroy all 13 of the other side's fighting units (fort, tanks, artillery and infantry) wins. Skirmish and Siege: destroy the fort and every tank and artillery. Infantry are optional, but they still score points. Score attack: after 20 shots each, the higher score wins. Walls left standing never matter. When the game ends, both bases are revealed so you can see the near misses.",
+      "In Skirmish, Battle and Siege, the first player to destroy the other side's fort and every tank and artillery wins. Infantry are optional, but they still score points. Score attack: after 20 shots each, the higher score wins. Walls left standing never matter. When the game ends, both bases are revealed so you can see the near misses.",
       "Points show on the side panel in every mode. Each hit scores: infantry 1, tank 3, artillery 3, fort 5 (on each of its two hits), walls 0.",
       "Tips: spread your infantry out so one shot can't catch several. Walls protect the edges of your fort, but a sharp shot aimed at its centre can still get through.",
     ],

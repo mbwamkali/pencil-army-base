@@ -55,7 +55,7 @@ function build(plan: Plan): GameRecord {
     // The hunter aims at the centre of the first enemy fighting unit still standing; the other player cycles fixed spots.
     const target = plan.layouts[hunterIs === 0 ? 1 : 0];
     const enemy = g.players[hunterIs === 0 ? 1 : 0].units;
-    const next = target.find((p) => !p.id.startsWith("wall") && enemy.find((u) => u.id === p.id)!.hits < (p.id === "fort-1" ? 2 : 1));
+    const next = target.find((p) => !p.id.startsWith("wall") && !p.id.startsWith("infantry") && enemy.find((u) => u.id === p.id)!.hits < (p.id === "fort-1" ? 2 : 1));
     const fortPlace = target.find((p) => p.id === "fort-1")!;
     const edge = { x: fortPlace.x + 0.2, y: fortPlace.y + 1.5 };
     const aim = g.current === hunterIs && plan.wallOpening && hunts < 2 ? (hunts++, edge) : g.current === hunterIs ? centre(target, next!.id) : plan.decoy[di++ % plan.decoy.length]!;
