@@ -6,7 +6,7 @@ async function startVsComputer(page: Page, seed = 7): Promise<void> {
   await page.getByTestId("new-game").click();
   await page.getByTestId("opponent-computer").click();
   await expect(page.getByTestId("name-2")).toHaveCount(0);
-  await expect(page.getByTestId("computer-name")).toContainText("Private Pencil");
+  await expect(page.getByText("Your name")).toBeVisible();
   await page.getByTestId("name-1").fill("Tester");
   await page.getByTestId("start-game").click();
   await page.getByTestId("random-layout").click();

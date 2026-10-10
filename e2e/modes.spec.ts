@@ -8,18 +8,29 @@ const panelFits = (page: Page) =>
     return panel.scrollHeight - panel.clientHeight;
   });
 
-test("Skirmish is the default mode on the setup screen, and each mode shows what it is", async ({ page }) => {
+test("Skirmish is the default mode, the info button explains each mode, and the choice is remembered", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("new-game").click();
-  await page.getByTestId("opponent-share").click();
   await expect(page.getByTestId("mode-select")).toHaveValue("skirmish");
+  await expect(page.getByTestId("mode-blurb")).toHaveCount(0);
+  await page.getByTestId("mode-info").click();
   await expect(page.getByTestId("mode-blurb")).toContainText("Small army");
-  await page.getByTestId("mode-select").selectOption("score");
-  await expect(page.getByTestId("mode-select")).toHaveValue("score");
-  await expect(page.getByTestId("mode-blurb")).toContainText("20 shots each");
   await page.getByTestId("mode-select").selectOption("battle");
   await expect(page.getByTestId("mode-blurb")).toContainText("Infantry are optional");
-  // Starting without touching the picker uses the default.
+  await page.getByTestId("mode-select").selectOption("score");
+  await expect(page.getByTestId("mode-blurb")).toContainText("20 shots each");
+  await page.getByTestId("mode-info").click();
+  await expect(page.getByTestId("mode-blurb")).toHaveCount(0);
+  // The last pick stays chosen on this phone.
+  await page.goto("/");
+  await page.getByTestId("new-game").click();
+  await expect(page.getByTestId("mode-select")).toHaveValue("score");
+  await page.getByTestId("opponent-share").click();
+  await page.getByTestId("start-game").click();
+  expect((await savedGame(page)).mode).toBe("score");
+});
+
+test("starting without touching the picker plays Skirmish", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("new-game").click();
   await page.getByTestId("opponent-share").click();

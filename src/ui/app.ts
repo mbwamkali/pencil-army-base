@@ -55,6 +55,8 @@ interface Ui {
   mode: ModeId;
   /** Setup choice: play the computer instead of a second person. */
   vsComputer: boolean;
+  /** The mode description shows only after tapping the info button next to the dropdown. */
+  modeInfo: boolean;
   game: Game | null;
   /** Shown after loading a saved game: the phone may have changed hands, so cover the base first. */
   gate: PlayerIndex | null;
@@ -74,11 +76,14 @@ interface Ui {
   pasteError: string;
 }
 
+const MODE_KEY = "pencil-army-base:mode";
+
 const ui: Ui = {
   screen: "menu",
   names: ["", ""],
-  mode: DEFAULT_MODE,
+  mode: loadMode(),
   vsComputer: false,
+  modeInfo: false,
   game: null,
   gate: null,
   view: "mine",
@@ -284,6 +289,60 @@ function accessScreen(): HTMLElement {
   );
 }
 
+/** The last mode picked on this phone, so it stays chosen between games. */
+function loadMode(): ModeId {
+  try {
+    const saved = localStorage.getItem(MODE_KEY);
+    return (MODE_IDS as readonly string[]).includes(saved ?? "") ? (saved as ModeId) : DEFAULT_MODE;
+  } catch {
+    return DEFAULT_MODE;
+  }
+}
+
+function pickMode(id: ModeId): void {
+  ui.mode = id;
+  try {
+    localStorage.setItem(MODE_KEY, id);
+  } catch {
+    // Still used for this game.
+  }
+  render();
+}
+
+function modePicker(): HTMLElement {
+  return el(
+    "div",
+    { class: "mode-picker" },
+    el(
+      "div",
+      { class: "mode-label" },
+      el("label", { for: "mode-select" }, "Mode"),
+      el(
+        "select",
+        {
+          id: "mode-select",
+          class: "mode-select",
+          "data-testid": "mode-select",
+          onchange: (e: Event) => pickMode((e.target as HTMLSelectElement).value as ModeId),
+        },
+        MODE_IDS.map((id) => el("option", { value: id, selected: ui.mode === id }, MODES[id].name)),
+      ),
+      el(
+        "button",
+        {
+          class: `btn info-btn${ui.modeInfo ? " on" : ""}`,
+          "data-testid": "mode-info",
+          "aria-label": "What is this mode?",
+          "aria-expanded": ui.modeInfo ? "true" : "false",
+          onclick: () => ((ui.modeInfo = !ui.modeInfo), render()),
+        },
+        "i",
+      ),
+    ),
+    ui.modeInfo && el("p", { class: "mode-blurb", "data-testid": "mode-blurb" }, MODES[ui.mode].blurb),
+  );
+}
+
 function opponentScreen(): HTMLElement {
   const choice = (vsComputer: boolean, testid: string, name: string, note: string) =>
     el(
@@ -310,7 +369,34 @@ function opponentScreen(): HTMLElement {
       choice(false, "opponent-share", "Share device", "Two players take turns on this phone"),
       choice(true, "opponent-computer", "vs Computer", `Play against ${AI_NAME}`),
     ),
+    modePicker(),
     el("div", { class: "menu-buttons row" }, el("button", { class: "btn", "data-testid": "back", onclick: () => ((ui.screen = "menu"), render()) }, "Back")),
+  );
+}
+
+function startGame(): void {
+  ui.screen = "game";
+  ui.turnKey = "";
+  ui.endShown = false;
+  ui.gate = null;
+  ui.view = "mine";
+  ui.aim = null;
+  setGame(createGame({ seed: seedFor(), names: [ui.names[0], ui.names[1]], mode: ui.mode, vsComputer: ui.vsComputer }));
+}
+
+/** A die for the Random name button, drawn in the pencil line style. */
+function diceIcon(): SVGElement {
+  return sv(
+    "svg",
+    { viewBox: "0 0 24 24", width: 26, height: 26, "aria-hidden": "true" },
+    sv("rect", { x: 3, y: 3, width: 18, height: 18, rx: 4, fill: "none", stroke: "currentColor", "stroke-width": 2 }),
+    [
+      [8, 8],
+      [16, 8],
+      [12, 12],
+      [8, 16],
+      [16, 16],
+    ].map(([cx, cy]) => sv("circle", { cx: cx!, cy: cy!, r: 1.6, fill: "currentColor" })),
   );
 }
 
@@ -319,7 +405,7 @@ function setupScreen(): HTMLElement {
     el(
       "div",
       { class: "name-field" },
-      el("label", { for: `name-${i + 1}` }, `Player ${i + 1}`),
+      el("label", { for: `name-${i + 1}` }, ui.vsComputer ? "Your name" : `Player ${i + 1}`),
       el(
         "div",
         { class: "name-row" },
@@ -337,44 +423,24 @@ function setupScreen(): HTMLElement {
         el(
           "button",
           {
-            class: "btn shuffle",
+            class: "shuffle",
             "data-testid": `shuffle-${i + 1}`,
-            "aria-label": `Pick another name for player ${i + 1}`,
+            title: "Random name",
+            "aria-label": `Random name for player ${i + 1}`,
             onclick: () => {
               ui.names[i] = nextDefaultName(ui.names[i], ui.names[i === 0 ? 1 : 0], Math.random);
               render();
             },
           },
-          "Shuffle",
+          diceIcon(),
         ),
       ),
     );
-  const modePicker = el(
-    "div",
-    { class: "mode-picker" },
-    el(
-      "label",
-      { class: "mode-label" },
-      "Mode",
-      el(
-        "select",
-        {
-          class: "mode-select",
-          "data-testid": "mode-select",
-          "aria-label": "Game mode",
-          onchange: (e: Event) => ((ui.mode = (e.target as HTMLSelectElement).value as ModeId), render()),
-        },
-        MODE_IDS.map((id) => el("option", { value: id, selected: ui.mode === id }, MODES[id].name)),
-      ),
-    ),
-    el("p", { class: "mode-blurb", "data-testid": "mode-blurb" }, MODES[ui.mode].blurb),
-  );
   return el(
     "div",
     { class: "screen center", "data-testid": "setup" },
     el("h2", {}, "Who's playing?"),
-    el("div", { class: "setup-row" }, field(0), ui.vsComputer ? el("div", { class: "name-field", "data-testid": "computer-name" }, el("label", {}, "Player 2"), el("p", { class: "computer-name" }, `${AI_NAME} (computer)`)) : field(1)),
-    modePicker,
+    el("div", { class: "setup-row" }, field(0), !ui.vsComputer && field(1)),
     el(
       "div",
       { class: "menu-buttons row" },
@@ -384,15 +450,7 @@ function setupScreen(): HTMLElement {
         {
           class: "btn primary",
           "data-testid": "start-game",
-          onclick: () => {
-            ui.screen = "game";
-            ui.turnKey = "";
-            ui.endShown = false;
-            ui.gate = null;
-            ui.view = "mine";
-            ui.aim = null;
-            setGame(createGame({ seed: seedFor(), names: [ui.names[0], ui.names[1]], mode: ui.mode, vsComputer: ui.vsComputer }));
-          },
+          onclick: startGame,
         },
         "Start",
       ),
@@ -905,12 +963,11 @@ function gameOverScreen(game: Game): HTMLElement {
           "data-testid": "play-again",
           onclick: () => {
             clearGame();
-            // Same opponent as last game, so straight to Who's playing.
+            // Same players, mode and opponent as last game, straight into building.
             ui.vsComputer = game.ai !== undefined;
-            ui.game = null;
-            ui.names = randomDefaultNames(Math.random);
-            ui.screen = "setup";
-            render();
+            ui.mode = game.mode;
+            ui.names = [game.players[0].name, game.players[1].name];
+            startGame();
           },
         },
         "Play again",

@@ -56,8 +56,8 @@ for (const mode of ["skirmish", "battle", "score"] as ModeName[]) {
     await turnOn(page, "largeText");
     expect(await page.evaluate(() => document.body.classList.contains("large-text"))).toBe(true);
     await page.getByTestId("new-game").click();
-    await page.getByTestId("opponent-share").click();
     await page.getByTestId("mode-select").selectOption(mode);
+    await page.getByTestId("opponent-share").click();
     await page.getByTestId("start-game").click();
     expect(await panelOverflow(page)).toBeLessThanOrEqual(0);
     await buildBothAndStart(page);
@@ -153,8 +153,8 @@ for (const large of [false, true]) {
     if (large) await turnOn(page, "largeText");
     await page.goto("/?seed=3");
     await page.getByTestId("new-game").click();
-    await page.getByTestId("opponent-share").click();
     await page.getByTestId("mode-select").selectOption("battle");
+    await page.getByTestId("opponent-share").click();
     await page.getByTestId("start-game").click();
     await buildBothAndStart(page);
     await huntCore(page, { w: 20, h: 10 });
@@ -170,8 +170,8 @@ for (const large of [false, true]) {
     if (large) await turnOn(page, "largeText");
     await page.goto("/?seed=3");
     await page.getByTestId("new-game").click();
-    await page.getByTestId("opponent-share").click();
     await page.getByTestId("mode-select").selectOption("battle");
+    await page.getByTestId("opponent-share").click();
     await page.getByTestId("start-game").click();
     await buildBothAndStart(page);
     await page.getByTestId("view-target").click();
