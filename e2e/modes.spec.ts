@@ -45,8 +45,8 @@ test("Skirmish is the default mode on the setup screen, and each mode shows what
   await expect(page.getByTestId("mode-score")).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByTestId("mode-skirmish")).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByTestId("mode-blurb")).toContainText("20 shots each");
-  await page.getByTestId("mode-siege").click();
-  await expect(page.getByTestId("mode-blurb")).toContainText("Infantry only score points");
+  await page.getByTestId("mode-battle").click();
+  await expect(page.getByTestId("mode-blurb")).toContainText("Infantry are optional");
   // Starting without touching the picker uses the default.
   await page.goto("/");
   await page.getByTestId("new-game").click();
@@ -109,7 +109,7 @@ test("points go up as units are hit, and the panel keeps room for them", async (
   expect(await panelFits(page)).toBeLessThanOrEqual(0);
 });
 
-for (const mode of ["battle", "siege", "score"] as ModeName[]) {
+for (const mode of ["battle", "score"] as ModeName[]) {
   test(`${mode} uses the full army and board, and the panel fits`, async ({ page }) => {
     await startNewGame(page, 5, ["", ""], mode);
     await expect(page.getByText("Place 17 more")).toBeVisible();
@@ -122,8 +122,8 @@ for (const mode of ["battle", "siege", "score"] as ModeName[]) {
   });
 }
 
-test("Siege ends without destroying infantry", async ({ page }) => {
-  await startNewGame(page, 9, ["", ""], "siege");
+test("Battle ends without destroying infantry", async ({ page }) => {
+  await startNewGame(page, 9, ["", ""], "battle");
   await buildBothAndStart(page);
   const hunter = (await savedGame(page)).current;
   await huntCore(page, { w: 20, h: 10 }, CORE, 80);
