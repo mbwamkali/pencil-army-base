@@ -53,6 +53,8 @@ interface Ui {
   turnKey: string;
   popover: "you" | "enemy" | null;
   tip: string;
+  /** In-game menu: closed, open (Resume / Main menu / New game), or asking before New game throws the game away. */
+  menu: "closed" | "open" | "confirm";
 }
 
 const ui: Ui = {
@@ -67,6 +69,7 @@ const ui: Ui = {
   turnKey: "",
   popover: null,
   tip: "",
+  menu: "closed",
 };
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
@@ -328,7 +331,6 @@ function buildScreen(game: Game): HTMLElement {
   const mode = modeOf(game.mode);
   const board = createBoard({ mode, tint: "own", testid: "board" });
   const SQ = board.sq;
-  const tip = el("p", { class: "tip", "data-testid": "tip" }, ui.tip);
   let dragId: string | null = null;
 
   const drawUnits = () => {
@@ -445,14 +447,17 @@ function buildScreen(game: Game): HTMLElement {
   );
 
   const complete = isArmyComplete(units, mode);
+  // One line under the name: a placement problem if there is one, otherwise how many units are left to place.
+  const sub = ui.tip
+    ? el("div", { class: "panel-sub tip", "data-testid": "tip" }, ui.tip)
+    : el("div", { class: "panel-sub" }, complete ? "Build your base" : `Place ${slots.length - units.length} more`);
   const panel = el(
     "div",
     { class: "panel" },
+    menuButton(),
     el("div", { class: "panel-name", "data-testid": "builder" }, game.players[player].name),
-    el("div", { class: "panel-sub" }, "Build your base"),
+    sub,
     tray,
-    tip,
-    !complete && !ui.tip && el("p", { class: "tip calm" }, `Place ${slots.length - units.length} more`),
     el("div", { class: "spacer" }),
     el(
       "button",
@@ -644,6 +649,7 @@ function battleScreen(game: Game): HTMLElement {
   const panel = el(
     "div",
     { class: "panel" },
+    menuButton(),
     toggle,
     el("div", { class: "panel-name", "data-testid": "shooter" }, mine.name),
     el("div", { class: "panel-sub", "data-testid": "turn" }, sub),
@@ -755,5 +761,58 @@ function gameOverScreen(game: Game): HTMLElement {
 // ---------------------------------------------------------------------------
 
 function layout(board: SVGSVGElement, panel: HTMLElement): HTMLElement {
-  return el("div", { class: "screen game" }, el("div", { class: "board-wrap" }, board), panel);
+  return el("div", { class: "screen game" }, el("div", { class: "board-wrap" }, board), panel, ui.menu !== "closed" && menuOverlay());
+}
+
+/** The small Menu button at the top of the side panel on the build and turn screens. */
+function menuButton(): HTMLElement {
+  return el("button", { class: "btn menu-btn", "data-testid": "menu-open", onclick: () => ((ui.menu = "open"), render()) }, "Menu");
+}
+
+function menuOverlay(): HTMLElement {
+  const close = () => {
+    ui.menu = "closed";
+    render();
+  };
+  const buttons =
+    ui.menu === "confirm"
+      ? [
+          el("p", { class: "menu-ask" }, "Throw away this game?"),
+          el(
+            "button",
+            {
+              class: "btn primary",
+              "data-testid": "menu-confirm-new",
+              onclick: () => {
+                clearGame();
+                ui.game = null;
+                ui.menu = "closed";
+                ui.names = randomDefaultNames(Math.random);
+                ui.screen = "setup";
+                render();
+              },
+            },
+            "Yes, new game",
+          ),
+          el("button", { class: "btn", "data-testid": "menu-keep", onclick: close }, "No, keep playing"),
+        ]
+      : [
+          el("button", { class: "btn primary", "data-testid": "menu-resume", onclick: close }, "Resume"),
+          el(
+            "button",
+            {
+              class: "btn",
+              "data-testid": "menu-main",
+              onclick: () => {
+                // The game is already saved, so Continue on the main menu brings it back.
+                ui.menu = "closed";
+                ui.screen = "menu";
+                render();
+              },
+            },
+            "Main menu",
+          ),
+          el("button", { class: "btn", "data-testid": "menu-new", onclick: () => ((ui.menu = "confirm"), render()) }, "New game"),
+        ];
+  return el("div", { class: "menu-overlay", "data-testid": "menu-overlay" }, el("div", { class: "menu-card" }, el("h3", {}, "Menu"), ...buttons));
 }
