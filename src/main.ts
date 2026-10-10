@@ -2,7 +2,8 @@ import { Capacitor } from "@capacitor/core";
 import { applySettings } from "./ui/settings.ts";
 import "@fontsource/patrick-hand";
 import "./style.css";
-import { render } from "./ui/app.ts";
+import { goBack, render } from "./ui/app.ts";
+import { onBackButton } from "./ui/native.ts";
 
 /** The game is drawn on a fixed 920 x 412 stage (a Pixel 9 held sideways) and scaled to fit any screen. */
 const STAGE_W = 920;
@@ -50,6 +51,7 @@ window.addEventListener("orientationchange", fit);
 fit();
 applySettings();
 render();
+onBackButton(goBack);
 
 // Offline play: the service worker is written at build time (see vite.config.ts), so it exists only in the built game.
 // The Android app already carries every file inside it, so it skips the service worker.

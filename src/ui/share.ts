@@ -5,6 +5,7 @@ import { rectOf, unitState } from "../rules/units.ts";
 import { FOOTPRINT } from "../rules/constants.ts";
 import { artUrl, unitArt } from "./art.ts";
 import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
+import { isApp, shareImage } from "./native.ts";
 
 const BOARD_W = 760;
 const PAD = 40;
@@ -144,6 +145,10 @@ export async function saveBattlefieldImage(game: Game): Promise<void> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) return;
   const file = new File([blob], "pencil-army-base-battlefield.png", { type: "image/png" });
+  if (isApp) {
+    await shareImage(blob, file.name, "Pencil Army Base");
+    return;
+  }
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: "Pencil Army Base" });

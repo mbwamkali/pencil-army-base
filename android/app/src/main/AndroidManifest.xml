@@ -15,6 +15,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:exported="true">
 
             <intent-filter>
@@ -38,4 +39,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- A short buzz when a unit is destroyed. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>
