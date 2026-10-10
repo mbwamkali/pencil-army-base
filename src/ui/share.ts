@@ -1,9 +1,10 @@
 import type { Game, PlayerIndex } from "../rules/game.ts";
-import { scoreOf, shotStats, unitsLeft } from "../rules/game.ts";
-import { fightingCount, modeOf } from "../rules/modes.ts";
+import { coreLeft, unitsLeft } from "../rules/game.ts";
+import { coreCount, fightingCount, modeOf } from "../rules/modes.ts";
 import { rectOf, unitState } from "../rules/units.ts";
 import { FOOTPRINT } from "../rules/constants.ts";
 import { artUrl, unitArt } from "./art.ts";
+import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
 
 const BOARD_W = 760;
 const PAD = 40;
@@ -35,7 +36,7 @@ export async function renderBattlefield(game: Game): Promise<HTMLCanvasElement> 
   const boardH = mode.grid.h * sq;
   const headH = 90;
   const titleH = 50;
-  const footH = 80;
+  const footH = 190;
   const canvas = document.createElement("canvas");
   canvas.width = PAD * 3 + BOARD_W * 2;
   canvas.height = PAD + headH + titleH + boardH + footH + PAD;
@@ -57,14 +58,18 @@ export async function renderBattlefield(game: Game): Promise<HTMLCanvasElement> 
   for (const p of [0, 1] as PlayerIndex[]) {
     const x0 = PAD + p * (BOARD_W + PAD);
     const y0 = PAD + headH + titleH;
-    const left = unitsLeft(game.players[p].units).total;
     ctx.fillStyle = INK;
     ctx.textAlign = "left";
     ctx.font = `34px ${FONT}`;
     ctx.fillText(`${game.players[p].name}'s base`, x0, y0 - 14);
     ctx.textAlign = "right";
     ctx.font = `28px ${FONT}`;
-    ctx.fillText(`${left} / ${fightingCount(mode)} left`, x0 + BOARD_W, y0 - 14);
+    const units = game.players[p].units;
+    ctx.fillText(
+      mode.win === "score" ? `${unitsLeft(units).total} / ${fightingCount(mode)} left` : `${coreLeft(units)} / ${coreCount(mode)} to destroy`,
+      x0 + BOARD_W,
+      y0 - 14,
+    );
 
     ctx.fillStyle = "#fff";
     ctx.fillRect(x0, y0, BOARD_W, boardH);
@@ -105,27 +110,53 @@ export async function renderBattlefield(game: Game): Promise<HTMLCanvasElement> 
     ctx.strokeRect(x0, y0, BOARD_W, boardH);
   }
 
-  const stat = (p: PlayerIndex) => {
-    const s = shotStats(game.players[p]);
-    return `${game.players[p].name}: ${s.hits} hits from ${s.shots} shots, ${scoreOf(game.players[p])} points`;
-  };
+  // The summary table: shots, hit rate and points by unit type, as on the end screen.
+  const rows = summaryRows(game);
+  const top = PAD + headH + titleH + boardH + 44;
+  const nameW = 330;
+  const colW = (canvas.width - PAD * 2 - nameW) / SUMMARY_HEADERS.length;
+  ctx.fillStyle = "#6b6d70";
+  ctx.font = `26px ${FONT}`;
+  ctx.textAlign = "right";
+  SUMMARY_HEADERS.forEach((h, c) => ctx.fillText(h, PAD + nameW + (c + 1) * colW - 12, top));
   ctx.fillStyle = INK;
+  rows.forEach((r, i) => {
+    const y = top + 42 * (i + 1);
+    ctx.textAlign = "left";
+    ctx.font = `30px ${FONT}`;
+    ctx.fillText(r.name, PAD, y);
+    ctx.textAlign = "right";
+    r.cells.forEach((cell, c) => ctx.fillText(cell, PAD + nameW + (c + 1) * colW - 12, y));
+  });
+  ctx.fillStyle = "#6b6d70";
   ctx.textAlign = "center";
-  ctx.font = `28px ${FONT}`;
-  const footY = PAD + headH + titleH + boardH + 48;
-  ctx.fillText(`${mode.name}, ${game.turn} turns. ${stat(0)}. ${stat(1)}.`, canvas.width / 2, footY);
+  ctx.font = `24px ${FONT}`;
+  ctx.fillText(`${mode.name}, ${game.turn} turns. Points by unit, with hits in brackets.`, canvas.width / 2, top + 42 * 3 + 20);
   return canvas;
 }
 
-/** Saves the final battlefield as a PNG: the browser's download, which lands in Downloads on a phone. */
+/**
+ * Offers the final battlefield as a PNG. On a phone that opens the share sheet (Save to Photos, Messages and so on);
+ * where the browser cannot share files, it downloads the image instead.
+ */
 export async function saveBattlefieldImage(game: Game): Promise<void> {
   const canvas = await renderBattlefield(game);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) return;
+  const file = new File([blob], "pencil-army-base-battlefield.png", { type: "image/png" });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Pencil Army Base" });
+      return;
+    }
+  } catch (err) {
+    // Closing the share sheet is a choice, not a failure; anything else falls back to the download.
+    if (err instanceof DOMException && err.name === "AbortError") return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "pencil-army-base-battlefield.png";
+  a.download = file.name;
   document.body.append(a);
   a.click();
   a.remove();

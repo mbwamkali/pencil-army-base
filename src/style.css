@@ -356,7 +356,7 @@ h2 {
   border-left: 2px solid var(--edge);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .panel-name {
@@ -374,7 +374,7 @@ h2 {
 
 .rule {
   border-top: 2px solid var(--edge);
-  margin: 4px 0;
+  margin: 2px 0;
 }
 
 .spacer {
@@ -422,10 +422,11 @@ h2 {
 .counter {
   font: inherit;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  padding: 2px 4px;
-  min-height: 34px;
+  padding: 1px 4px;
+  min-height: 0;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -764,4 +765,94 @@ body.large-text .status b,
 body.large-text .counter b,
 body.large-text .points b {
   font-size: 23px;
+}
+
+.menu-links {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.version {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  text-align: center;
+  font-size: 16px;
+  color: var(--ink-soft);
+}
+
+.counter small {
+  width: 100%;
+  margin-top: -4px;
+  text-align: right;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+
+.menu-row {
+  display: flex;
+  gap: 4px;
+}
+
+.menu-row .menu-btn {
+  flex: 1;
+  padding: 2px 4px;
+}
+
+.summary {
+  margin: 6px auto 0;
+  border-collapse: collapse;
+  font-size: 16px;
+}
+
+.summary th {
+  font-weight: normal;
+  color: var(--ink-soft);
+  padding: 0 10px;
+}
+
+.summary td {
+  padding: 0 10px;
+}
+
+.summary td:last-child,
+.summary th:last-child {
+  font-weight: bold;
+}
+
+.summary-name {
+  text-align: left;
+}
+
+/* End screen: the summary table needs room, so the winner line and bases are a little smaller. */
+.over .winner {
+  font-size: 34px;
+}
+
+.over .summary {
+  margin: 4px auto 6px;
+  font-size: 15px;
+}
+
+
+.counter b,
+.points b {
+  font-size: 20px;
+}
+
+body.large-text .counter b,
+body.large-text .points b {
+  font-size: 21px;
+}
+
+body.large-text .status {
+  font-size: 17px;
+}
+
+body.large-text .status b {
+  font-size: 19px;
 }

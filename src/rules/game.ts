@@ -1,4 +1,4 @@
-import { ARMY, DEFAULT_NAMES, SHOT_RADIUS } from "./constants.ts";
+import { ARMY, DEFAULT_NAMES, SHOT_RADIUS, UNIT_TYPES, type UnitType } from "./constants.ts";
 import { POINTS, modeOf, type Mode, type ModeId } from "./modes.ts";
 import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
@@ -131,6 +131,14 @@ export function removeUnit(game: Game, player: PlayerIndex, id: string): Outcome
   return { ok: true, game: g };
 }
 
+/** Clear all: takes every placed unit off the player's base so they can start over. */
+export function clearUnits(game: Game, player: PlayerIndex): Outcome {
+  if (game.phase !== "build" || game.building !== player) return fail("wrong_phase");
+  const g = clone(game);
+  g.players[player].units = [];
+  return { ok: true, game: g };
+}
+
 export function isArmyComplete(units: readonly Unit[], mode: Mode = modeOf("battle")): boolean {
   return armySlots(mode.army).every((s) => units.some((u) => u.id === s.id));
 }
@@ -232,6 +240,12 @@ export function unitsLeft(units: readonly Unit[]): UnitsLeft {
   };
 }
 
+/** Fort, tanks and artillery still standing: what is left to destroy to win a Skirmish or Battle. */
+export function coreLeft(units: readonly Unit[]): number {
+  const left = unitsLeft(units).byType;
+  return left.fort + left.tank + left.artillery;
+}
+
 /** True when the fort and every tank and artillery are destroyed (the win rule for Skirmish and Battle). */
 export function coreDestroyed(units: readonly Unit[]): boolean {
   return units.every((u) => !["fort", "tank", "artillery"].includes(u.type) || unitState(u) === "destroyed");
@@ -240,6 +254,18 @@ export function coreDestroyed(units: readonly Unit[]): boolean {
 /** A player's points: every hit they landed, by unit type. Walls score nothing. */
 export function scoreOf(player: PlayerState): number {
   return player.shots.reduce((sum, s) => sum + s.hits.reduce((n, h) => n + POINTS[h.type], 0), 0);
+}
+
+/** Hits landed and points earned, by the type of unit hit. A fort scores on both of its hits. */
+export function pointsByType(player: PlayerState): Record<UnitType, { hits: number; points: number }> {
+  const out = Object.fromEntries(UNIT_TYPES.map((t) => [t, { hits: 0, points: 0 }])) as Record<UnitType, { hits: number; points: number }>;
+  for (const s of player.shots) {
+    for (const h of s.hits) {
+      out[h.type].hits += 1;
+      out[h.type].points += POINTS[h.type];
+    }
+  }
+  return out;
 }
 
 export const FIGHTING_UNITS = ARMY.fort + ARMY.tank + ARMY.artillery + ARMY.infantry;

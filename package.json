@@ -1,6 +1,6 @@
 {
   "name": "pencil-army-base",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "A two-player pencil-and-paper battle game for the browser",

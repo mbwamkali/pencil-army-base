@@ -51,7 +51,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     body: [
       "In Battle and Score attack both players get the same 17 units: 1 fort (3 x 3 squares, takes 2 hits), 3 tanks and 3 artillery (2 x 2 squares), 6 infantry (1 square) and 4 walls (2 x 1 squares). Bigger units are easier for your opponent to hit.",
       "Skirmish uses 1 fort, 1 tank, 1 artillery, 2 infantry and 2 walls.",
-      "Walls don't count. Walls are there to protect your army, not to fight. They are not included in the units-left counter, and you don't need to destroy them to win. The counter starts at 13: your fort, tanks, artillery and infantry.",
+      "Walls don't count. Walls are there to protect your army, not to fight. You don't need to destroy them to win. The counter shows the fort, tanks and artillery you still have to destroy, with the infantry beneath it. In Score attack it counts every fighting unit.",
     ],
   },
   {
@@ -91,6 +91,23 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
       "In Skirmish and Battle, the first player to destroy the other side's fort and every tank and artillery wins. Infantry are optional, but they still score points. Score attack: after 20 shots each, the higher score wins. Walls left standing never matter. When the game ends, both bases are revealed so you can see the near misses.",
       "Points show on the side panel in every mode. Each hit scores: infantry 1, tank 3, artillery 3, fort 5 (on each of its two hits), walls 0.",
       "Tips: spread your infantry out so one shot can't catch several. Walls protect the edges of your fort, but a sharp shot aimed at its centre can still get through.",
+    ],
+  },
+];
+
+/** The About screen: who made the game, what it uses, and what happens to your data (nothing leaves the device). */
+export const ABOUT: { heading: string; body: string[] }[] = [
+  {
+    heading: "Credits",
+    body: [
+      "A digital version of a two-player paper game from childhood: hide an army on one half of a page, then hunt for the other player's units with pencil marks.",
+      "Game design and testing by the Pencil Army Base project. Built with Claude, an AI assistant made by Anthropic. The pencil drawings were made for this game. The handwriting font is Patrick Hand by Patrick Wagesreiter, used under the SIL Open Font License.",
+    ],
+  },
+  {
+    heading: "Privacy",
+    body: [
+      "This game collects nothing. There are no accounts, no ads and no tracking, and nothing you do is sent anywhere. Your game in progress and your accessibility choices are saved only in this browser on this device, and Play again or New game clears the saved game.",
     ],
   },
 ];

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   MODES,
   MODE_IDS,
+  clearUnits,
+  coreCount,
+  coreLeft,
+  pointsByType,
   POINTS,
   Rng,
   confirmHandoff,
@@ -243,5 +247,38 @@ describe("Score attack", () => {
     expect(g.winner).toBe(a);
     expect(scoreOf(g.players[a])).toBe(3 * 3 + 3 * 3 + 6 + 10);
     expect(scoreOf(g.players[b])).toBe(0);
+  });
+});
+
+describe("counters, clearing and summary helpers", () => {
+  it("counts the core left to destroy, apart from infantry", () => {
+    const g = battle("battle", FREE);
+    const units = g.players[0].units;
+    expect(coreLeft(units)).toBe(7);
+    expect(coreCount(MODES.battle)).toBe(7);
+    expect(coreCount(MODES.skirmish)).toBe(3);
+    expect(unitsLeft(units).byType.infantry).toBe(6);
+  });
+
+  it("clears every unit during the build phase only", () => {
+    const g = createGame({ seed: 1, mode: "skirmish" });
+    const placed = ok(placeUnit(g, g.building, "fort-1", 4, 2, false));
+    expect(placed.players[g.building].units).toHaveLength(1);
+    const cleared = ok(clearUnits(placed, g.building));
+    expect(cleared.players[g.building].units).toHaveLength(0);
+    expect(clearUnits(placed, g.building === 0 ? 1 : 0)).toEqual({ ok: false, reason: "wrong_phase" });
+  });
+});
+
+describe("points by unit type", () => {
+  it("adds up each type's hits and points, and they sum to the score", () => {
+    const g = battle("skirmish", SKIRMISH);
+    const a = g.current;
+    const f = shoot(g, 5, 1); // the tank
+    const by = pointsByType(f.players[a]);
+    expect(by.tank).toEqual({ hits: 1, points: 3 });
+    expect(by.fort.hits + by.tank.hits + by.artillery.hits + by.infantry.hits + by.wall.hits).toBeGreaterThan(0);
+    const total = Object.values(by).reduce((n, v) => n + v.points, 0);
+    expect(total).toBe(scoreOf(f.players[a]));
   });
 });

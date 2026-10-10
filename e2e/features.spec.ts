@@ -82,3 +82,105 @@ test("the end screen saves an image of the final battlefield", async ({ page }) 
   // PNG signature.
   expect([...readFileSync(path).subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
 });
+
+test("the main menu shows the version, and About has credits, the version and a privacy note", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("version")).toHaveText(/^Version \d+\.\d+\.\d+$/);
+  const version = (await page.getByTestId("version").innerText()).replace("Version ", "");
+  await page.getByTestId("about").click();
+  const about = page.getByTestId("about-screen");
+  await expect(about).toContainText(`version ${version}`);
+  await expect(about).toContainText("Credits");
+  await expect(about).toContainText("collects nothing");
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByTestId("menu")).toBeVisible();
+});
+
+test("Clear all removes every placed unit after asking, and can be cancelled", async ({ page }) => {
+  await startNewGame(page, 7);
+  await expect(page.getByTestId("clear-all")).toBeDisabled();
+  await page.getByTestId("random-layout").click();
+  await expect(page.locator("[data-unit]")).toHaveCount(17);
+  await page.getByTestId("clear-all").click();
+  await page.getByTestId("clear-keep").click();
+  await expect(page.locator("[data-unit]")).toHaveCount(17);
+  await page.getByTestId("clear-all").click();
+  await page.getByTestId("clear-confirm").click();
+  await expect(page.locator("[data-unit]")).toHaveCount(0);
+  await expect(page.getByTestId("done")).toBeDisabled();
+  expect((await savedGame(page)).players[0]!.units).toHaveLength(0);
+  await expect(page.getByTestId("tray-fort")).toHaveAttribute("data-left", "1");
+});
+
+test("the end screen summarises shots, hit rate and points by unit type", async ({ page }) => {
+  await startNewGame(page, 3, ["", ""], "skirmish");
+  await buildBothAndStart(page);
+  const hunter = (await savedGame(page)).current;
+  await huntCore(page);
+  const over = await savedGame(page);
+  const row = page.getByTestId(`summary-${hunter}`);
+  const shots = over.players[hunter]!.shots.length;
+  await expect(row).toContainText(over.players[hunter]!.name);
+  const cells = await row.locator("td").allInnerTexts();
+  expect(cells[1]).toBe(String(shots));
+  expect(cells[2]).toMatch(/^\d+%$/);
+  // Fort 5 per hit twice, tank 3, artillery 3: at least 16 in all.
+  expect(Number(cells.at(-1))).toBeGreaterThanOrEqual(16);
+  await expect(page.getByTestId("summary")).toContainText("Hit rate");
+});
+
+test("Save image uses the share sheet when the browser can share files, and downloads otherwise", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { shared: unknown[] }).shared = [];
+    navigator.canShare = () => true;
+    navigator.share = async (data) => {
+      (window as unknown as { shared: unknown[] }).shared.push({ files: data?.files?.map((f) => f.name) });
+    };
+  });
+  await startNewGame(page, 3, ["", ""], "skirmish");
+  await buildBothAndStart(page);
+  await huntCore(page);
+  await page.getByTestId("save-image").click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { shared: unknown[] }).shared.length)).toBe(1);
+  expect(await page.evaluate(() => (window as unknown as { shared: { files: string[] }[] }).shared[0]!.files)).toEqual([
+    "pencil-army-base-battlefield.png",
+  ]);
+});
+
+for (const large of [false, true]) {
+  test(`the end screen buttons stay on screen${large ? " with larger text" : ""}`, async ({ page }) => {
+    if (large) await turnOn(page, "largeText");
+    await page.goto("/?seed=3");
+    await page.getByTestId("new-game").click();
+    await page.getByTestId("mode-battle").click();
+    await page.getByTestId("start-game").click();
+    await buildBothAndStart(page);
+    await huntCore(page, { w: 20, h: 10 });
+    const fit = await page.evaluate(() => {
+      const stage = document.getElementById("stage")!.getBoundingClientRect();
+      const btn = document.querySelector('[data-testid="save-image"]')!.getBoundingClientRect();
+      return stage.bottom - btn.bottom;
+    });
+    expect(fit).toBeGreaterThanOrEqual(0);
+  });
+
+  test(`the shot result is fully visible in the panel${large ? " with larger text" : ""}`, async ({ page }) => {
+    if (large) await turnOn(page, "largeText");
+    await page.goto("/?seed=3");
+    await page.getByTestId("new-game").click();
+    await page.getByTestId("mode-battle").click();
+    await page.getByTestId("start-game").click();
+    await buildBothAndStart(page);
+    await page.getByTestId("view-target").click();
+    const g = await savedGame(page);
+    const inf = g.players[g.current === 0 ? 1 : 0]!.units.find((u) => u.type === "infantry")!;
+    await tapGrid(page, inf.x + 0.5, inf.y + 0.5);
+    await page.getByTestId("fire").click();
+    const gap = await page.evaluate(() => {
+      const result = document.querySelector('[data-testid="result"]')!.getBoundingClientRect();
+      const status = document.querySelector(".status")!.getBoundingClientRect();
+      return status.bottom - result.bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(-0.5);
+  });
+}
