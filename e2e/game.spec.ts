@@ -159,6 +159,18 @@ test("the game keeps a margin from the screen edges so rounded phone corners do 
   expect(size.height - (box!.y + box!.height)).toBeGreaterThanOrEqual(15.5);
 });
 
+test("the side panel fits on screen while building, before Done is available", async ({ page }) => {
+  await startNewGame(page, 7);
+  const fit = await page.evaluate(() => {
+    const panel = document.querySelector(".panel") as HTMLElement;
+    const stage = document.getElementById("stage")!.getBoundingClientRect();
+    const done = document.querySelector('[data-testid="done"]')!.getBoundingClientRect();
+    return { overflow: panel.scrollHeight - panel.clientHeight, doneBottom: done.bottom, stageBottom: stage.bottom };
+  });
+  expect(fit.overflow).toBeLessThanOrEqual(0);
+  expect(fit.doneBottom).toBeLessThanOrEqual(fit.stageBottom - 7);
+});
+
 test("buttons are big enough for a thumb and nothing overflows the screen", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);
