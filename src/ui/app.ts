@@ -39,6 +39,7 @@ import {
   type Board,
 } from "./board.ts";
 import { el, sv } from "./dom.ts";
+import { copyText, isApp } from "./native.ts";
 import { saveBattlefieldImage } from "./share.ts";
 import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
 import { VERSION } from "./version.ts";
@@ -111,6 +112,8 @@ function setGame(game: Game): void {
 }
 
 function goFullscreen(): void {
+  // The Android app is already full screen and locked to landscape.
+  if (isApp) return;
   try {
     const root = document.documentElement;
     if (!document.fullscreenElement && root.requestFullscreen) {
@@ -165,6 +168,28 @@ export function render(): void {
   }
   document.body.dataset.screen = screenName;
   root.replaceChildren(node);
+}
+
+/**
+ * The Android back button. It steps back one screen, opens the in-game Menu instead of leaving a game,
+ * and does nothing on the black handoff screen so it can never uncover a base.
+ * Returns false on the main menu, where back closes the app.
+ */
+export function goBack(): boolean {
+  if (ui.screen === "menu") return false;
+  if (ui.screen !== "game" || !ui.game) {
+    ui.screen = ui.screen === "setup" ? "opponent" : "menu";
+  } else if (ui.menu !== "closed") {
+    ui.menu = "closed";
+  } else if (document.body.dataset.screen === "handoff") {
+    return true;
+  } else if (document.body.dataset.screen === "over") {
+    ui.screen = "menu";
+  } else {
+    ui.menu = "open";
+  }
+  render();
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,15 +1041,12 @@ function copyLayout(): void {
   ui.copied = { code, ok: false };
   ui.menu = "copy";
   render();
-  navigator.clipboard
-    ?.writeText(code)
-    .then(() => {
-      if (ui.copied?.code === code) {
-        ui.copied.ok = true;
-        render();
-      }
-    })
-    .catch(() => {});
+  void copyText(code).then((ok) => {
+    if (ok && ui.copied?.code === code) {
+      ui.copied.ok = true;
+      render();
+    }
+  });
 }
 
 function tryPaste(text: string): void {

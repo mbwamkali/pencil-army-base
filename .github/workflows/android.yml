@@ -1,0 +1,101 @@
+name: Android
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Builds the Android test app from the same web build as the site.
+  test-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug
+        working-directory: android
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk pencil-army-base-test.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pencil-army-base-test-apk
+          path: pencil-army-base-test.apk
+      # The newest test build from main or the port branch goes on one GitHub release, so the phone can download it from a fixed link.
+      - name: Publish test build
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/claude/capacitor-port'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Test build ${GITHUB_RUN_NUMBER} from ${GITHUB_SHA::7}. Install on an Android phone; it updates the previous test build."
+          if gh release view android-test >/dev/null 2>&1; then
+            gh release edit android-test --notes "$notes"
+          else
+            gh release create android-test --prerelease --title "Android test build" --target "$GITHUB_SHA" --notes "$notes"
+          fi
+          gh release upload android-test pencil-army-base-test.apk --clobber
+
+  # The Play Store build: a signed app bundle (.aab), made when a version tag such as v1.2.0 is pushed,
+  # or on demand from the Actions tab. It goes on a draft release, which only the repo's owner can see,
+  # ready to upload in the Play Console.
+  release-build:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - name: Unpack the upload key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+          PASSWORD: ${{ secrets.ANDROID_UPLOAD_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE" ] || [ -z "$PASSWORD" ]; then
+            echo "::error::Add the ANDROID_UPLOAD_KEYSTORE and ANDROID_UPLOAD_PASSWORD secrets first."
+            exit 1
+          fi
+          echo "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$PASSWORD" -alias upload >/dev/null \
+            || { echo "::error::The upload key or its password is wrong, or its alias isn't 'upload'."; exit 1; }
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: ./gradlew bundleRelease
+        working-directory: android
+        env:
+          ANDROID_UPLOAD_KEYSTORE_FILE: ${{ runner.temp }}/upload.jks
+          ANDROID_UPLOAD_PASSWORD: ${{ secrets.ANDROID_UPLOAD_PASSWORD }}
+      - run: cp android/app/build/outputs/bundle/release/app-release.aab "pencil-army-base-$(node -p 'require("./package.json").version')-build${GITHUB_RUN_NUMBER}.aab"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pencil-army-base-aab
+          path: pencil-army-base-*.aab
+      - name: Put it on a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          tag="${GITHUB_REF_NAME}"
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || tag="v${version}-build${GITHUB_RUN_NUMBER}"
+          gh release create "$tag" pencil-army-base-*.aab --draft --target "$GITHUB_SHA" --title "Pencil Army Base ${tag}" \
+            --notes "Play Store build ${GITHUB_RUN_NUMBER} (version ${version}). Upload the .aab in the Play Console."

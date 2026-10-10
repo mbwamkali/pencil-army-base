@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pencil Army Base</string>
+    <string name="title_activity_main">Pencil Army Base</string>
+    <string name="package_name">com.mbwamkali.pencilarmybase</string>
+    <string name="custom_url_scheme">com.mbwamkali.pencilarmybase</string>
+</resources>
