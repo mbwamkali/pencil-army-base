@@ -33,10 +33,12 @@ import {
   type Board,
 } from "./board.ts";
 import { el, sv } from "./dom.ts";
+import { saveBattlefieldImage } from "./share.ts";
+import { applySettings, setSetting, settings } from "./settings.ts";
 import { clearGame, loadGame, saveGame } from "./store.ts";
 import { HOW_TO_PLAY, describeIncoming, describeShot } from "./text.ts";
 
-type Screen = "menu" | "howto" | "setup" | "game";
+type Screen = "menu" | "howto" | "setup" | "access" | "game";
 
 interface Ui {
   screen: Screen;
@@ -110,7 +112,8 @@ export function render(): void {
   let node: HTMLElement;
   const game = ui.game;
   if (ui.screen !== "game" || !game) {
-    node = ui.screen === "howto" ? howToScreen() : ui.screen === "setup" ? setupScreen() : menuScreen();
+    node =
+      ui.screen === "howto" ? howToScreen() : ui.screen === "setup" ? setupScreen() : ui.screen === "access" ? accessScreen() : menuScreen();
   } else if (ui.gate !== null) {
     screenName = "handoff";
     node = handoffScreen(game.players[ui.gate].name, () => {
@@ -179,6 +182,7 @@ function menuScreen(): HTMLElement {
           "Continue",
         ),
       el("button", { class: "btn", "data-testid": "how-to-play", onclick: () => ((ui.screen = "howto"), render()) }, "How to play"),
+      el("button", { class: "btn", "data-testid": "accessibility", onclick: () => ((ui.screen = "access"), render()) }, "Accessibility"),
     ),
   );
 }
@@ -203,6 +207,36 @@ function howToScreen(): HTMLElement {
       el("h2", {}, "How to play"),
       HOW_TO_PLAY.map((s) => [el("h3", {}, s.heading), s.body.map((t) => el("p", {}, t))]),
     ),
+  );
+}
+
+function accessScreen(): HTMLElement {
+  const toggle = (key: "largeText" | "clearMarkers", label: string, blurb: string) =>
+    el(
+      "div",
+      { class: "access-row" },
+      el(
+        "button",
+        {
+          class: `btn mode-btn${settings[key] ? " on" : ""}`,
+          "data-testid": `access-${key}`,
+          "aria-pressed": settings[key] ? "true" : "false",
+          onclick: () => {
+            setSetting(key, !settings[key]);
+            render();
+          },
+        },
+        `${label}: ${settings[key] ? "On" : "Off"}`,
+      ),
+      el("p", { class: "mode-blurb" }, blurb),
+    );
+  return el(
+    "div",
+    { class: "screen center", "data-testid": "access-screen" },
+    el("h2", {}, "Accessibility"),
+    toggle("largeText", "Larger text", "Bigger words on every screen."),
+    toggle("clearMarkers", "Clear markers", "Hits get a dark disc with a white cross, misses a white ring, and no colour is needed to tell them apart."),
+    el("div", { class: "menu-buttons row" }, el("button", { class: "btn", onclick: () => ((ui.screen = "menu"), render()) }, "Back")),
   );
 }
 
@@ -335,7 +369,7 @@ function buildScreen(game: Game): HTMLElement {
 
   const drawUnits = () => {
     board.units.replaceChildren();
-    for (const u of units) drawUnit(board.units, { ...u, state: "normal" }, SQ, { opacity: u.id === dragId ? 0.25 : 1 });
+    for (const u of units) drawUnit(board.units, { ...u, state: "normal", mirror: player === 1 }, SQ, { opacity: u.id === dragId ? 0.25 : 1 });
   };
   drawUnits();
 
@@ -381,7 +415,7 @@ function buildScreen(game: Game): HTMLElement {
           class: valid ? "ghost-ok" : "ghost-bad",
         }),
       );
-      drawUnit(board.overlay, { id: "ghost", ...cand, state: "normal" }, SQ, { opacity: 0.85 });
+      drawUnit(board.overlay, { id: "ghost", ...cand, state: "normal", mirror: player === 1 }, SQ, { opacity: 0.85 });
     };
 
     const finish = (ev: PointerEvent) => {
@@ -514,7 +548,7 @@ function battleScreen(game: Game): HTMLElement {
 
   if (ui.view === "mine") {
     board = createBoard({ mode, tint: "own", testid: "board" });
-    for (const u of mine.units) drawUnit(board.units, { ...u, state: unitState(u) }, SQ);
+    for (const u of mine.units) drawUnit(board.units, { ...u, state: unitState(u), mirror: me === 1 }, SQ);
     const incoming = theirs.shots;
     incoming.forEach((s, i) => {
       drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
@@ -531,7 +565,7 @@ function battleScreen(game: Game): HTMLElement {
     const view = targetView(game, me);
     const untouched = view.shots.length === 0;
     board = createBoard({ mode, tint: "target", label: untouched ? `${theirs.name}'s base (hidden)` : undefined, testid: "board" });
-    for (const u of view.revealed) drawUnit(board.units, { ...u, state: u.state }, SQ);
+    for (const u of view.revealed) drawUnit(board.units, { ...u, state: u.state, mirror: me !== 1 }, SQ);
     for (const s of view.shots) drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
     if (justFired) {
       board.marks.append(sv("circle", { cx: justFired.x * SQ, cy: justFired.y * SQ, r: 0.95 * SQ, class: "last-shot" }));
@@ -699,7 +733,7 @@ function gameOverScreen(game: Game): HTMLElement {
   const mini = (20 * 20) / mode.grid.w;
   const side = (p: PlayerIndex) => {
     const b = createBoard({ mode, sq: mini, tint: "own" });
-    for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u) }, mini);
+    for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u), mirror: p === 1 }, mini);
     for (const s of game.players[other(p)].shots) drawShot(b.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, mini);
     const left = unitsLeft(game.players[p].units).total;
     return el(
@@ -741,6 +775,7 @@ function gameOverScreen(game: Game): HTMLElement {
         },
         "Play again",
       ),
+      el("button", { class: "btn", "data-testid": "save-image", onclick: () => void saveBattlefieldImage(game) }, "Save image"),
       el(
         "button",
         {

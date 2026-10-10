@@ -684,3 +684,84 @@ h2 {
   font-size: 22px;
   text-align: center;
 }
+
+.access-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 640px;
+}
+
+.access-row .mode-blurb {
+  margin: 0 0 6px;
+  text-align: center;
+}
+
+/* Clear markers: shapes and strong contrast, no reliance on colour. */
+.mark-hit-disc {
+  fill: #111;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.mark-hit-cross {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.mark-miss-ring {
+  fill: #fff;
+  stroke: #111;
+  stroke-width: 3;
+}
+
+body.clear-markers .last-shot {
+  stroke: #111;
+  stroke-width: 4;
+}
+
+/* Larger text: bigger words, with the panel still fitting on the screen. */
+body.large-text .subtitle,
+body.large-text .howto-scroll,
+body.large-text .mode-blurb,
+body.large-text .stats,
+body.large-text .mini-title,
+body.large-text .name-input,
+body.large-text .setup-row .name-field,
+body.large-text .shuffle {
+  font-size: 1.25em;
+}
+
+body.large-text .howto-scroll h3 {
+  font-size: 30px;
+}
+
+body.large-text .mini-title span,
+body.large-text .muted,
+body.large-text .popover,
+body.large-text .menu-ask {
+  font-size: 1.2em;
+}
+
+body.large-text .panel-name {
+  font-size: 22px;
+}
+
+body.large-text .panel-sub,
+body.large-text .tip,
+body.large-text .status,
+body.large-text .tray-item,
+body.large-text .toggle-btn,
+body.large-text .counter,
+body.large-text .points {
+  font-size: 19px;
+}
+
+body.large-text .status b,
+body.large-text .counter b,
+body.large-text .points b {
+  font-size: 23px;
+}

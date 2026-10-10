@@ -55,3 +55,32 @@ export function centreOfUnit(u: { type: string; x: number; y: number; upright: b
   const [rw, rh] = u.type === "wall" && u.upright ? [h, w] : [w, h];
   return { x: u.x + rw / 2, y: u.y + rh / 2 };
 }
+
+export const CORE = ["fort", "tank", "artillery"];
+
+/** The first player keeps shooting at a fort, tank or artillery; the other fires into an empty corner. */
+export async function huntCore(page: Page, grid: GridSize = SMALL, only: string[] = CORE, maxShots = 60): Promise<number> {
+  const hunter = (await savedGame(page)).current;
+  let shots = 0;
+  while (shots < maxShots) {
+    const g = await savedGame(page);
+    const foe = g.current === 0 ? 1 : 0;
+    await page.getByTestId("view-target").click();
+    let aim = { x: grid.w - 0.5, y: grid.h - 0.5 };
+    if (g.current === hunter) {
+      const target = g.players[foe]!.units.find((u) => only.includes(u.type) && u.hits < (u.type === "fort" ? 2 : 1))!;
+      aim = centreOfUnit(target);
+    }
+    await tapGrid(page, aim.x, aim.y, grid);
+    await page.getByTestId("fire").click();
+    shots++;
+    if ((await savedGame(page)).phase === "over") {
+      await page.getByTestId("see-results").click();
+      return shots;
+    }
+    await page.getByTestId("end-turn").click();
+    await page.getByTestId("start").click();
+  }
+  throw new Error("the game did not end");
+}
+

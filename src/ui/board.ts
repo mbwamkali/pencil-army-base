@@ -3,6 +3,7 @@ import { MODES, type Mode } from "../rules/modes.ts";
 import { rectOf, type UnitState } from "../rules/units.ts";
 import { artUrl, unitArt } from "./art.ts";
 import { sv } from "./dom.ts";
+import { settings } from "./settings.ts";
 
 /** Points per grid square on a full-screen base (grid 20 x 10 = 760 x 380). */
 export const SQ = 38;
@@ -22,6 +23,8 @@ export interface DrawUnit {
   y: number;
   upright: boolean;
   state: UnitState;
+  /** Player 2's army is drawn mirrored, so the two armies face each other. */
+  mirror?: boolean;
 }
 
 export interface DrawShot {
@@ -38,7 +41,12 @@ export function drawUnit(parent: Element, u: DrawUnit, sq: number, opts: { opaci
   const side = Math.max(FOOTPRINT[u.type].w, FOOTPRINT[u.type].h) * sq;
   const cx = (r.x + r.w / 2) * sq;
   const cy = (r.y + r.h / 2) * sq;
-  const g = sv("g", { "data-unit": u.id, "data-state": u.state, opacity: opts.opacity });
+  const g = sv("g", {
+    "data-unit": u.id,
+    "data-state": u.state,
+    opacity: opts.opacity,
+    transform: u.mirror ? `translate(${2 * cx} 0) scale(-1 1)` : undefined,
+  });
   g.append(
     sv("image", {
       href: unitArt(u.type, u.state),
@@ -63,6 +71,25 @@ export function drawShotImage(parent: Element, name: string, x: number, y: numbe
 
 export function drawShot(parent: Element, s: DrawShot, sq: number): void {
   drawShotImage(parent, s.hit ? "shot-hit" : "shot-miss", s.x, s.y, sq);
+  if (settings.clearMarkers) drawClearMarker(parent, s, sq);
+}
+
+/** Strong marks on top of the pencil smudge: a dark disc with a white cross for a hit, a white ring for a miss. */
+function drawClearMarker(parent: Element, s: DrawShot, sq: number): void {
+  const cx = s.x * sq;
+  const cy = s.y * sq;
+  const r = 0.34 * sq;
+  const g = sv("g", { class: s.hit ? "mark-hit" : "mark-miss" });
+  if (s.hit) {
+    const k = r * 0.5;
+    g.append(
+      sv("circle", { cx, cy, r, class: "mark-hit-disc" }),
+      sv("path", { d: `M${cx - k} ${cy - k}L${cx + k} ${cy + k}M${cx + k} ${cy - k}L${cx - k} ${cy + k}`, class: "mark-hit-cross" }),
+    );
+  } else {
+    g.append(sv("circle", { cx, cy, r: r * 0.8, class: "mark-miss-ring" }));
+  }
+  parent.append(g);
 }
 
 export interface Board {
