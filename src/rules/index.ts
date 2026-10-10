@@ -1,4 +1,5 @@
 export * from "./constants.ts";
+export * from "./ai.ts";
 export * from "./code.ts";
 export * from "./game.ts";
 export * from "./layout.ts";

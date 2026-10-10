@@ -157,21 +157,47 @@ h2 {
 }
 
 .name-row {
+  position: relative;
   display: flex;
-  gap: 8px;
 }
 
+/* The Random name die sits inside the right end of the name box. */
 .shuffle {
-  font-size: 20px;
-  padding: 4px 14px;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.info-btn {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 22px;
+  font-style: italic;
+}
+
+.info-btn.on {
+  background: var(--ink);
+  color: #fff;
 }
 
 .name-input {
   font: inherit;
   font-size: 24px;
-  width: 250px;
+  width: 300px;
   min-height: 48px;
-  padding: 4px 12px;
+  padding: 4px 52px 4px 12px;
   border: 2px solid var(--ink);
   border-radius: 10px;
   background: #fff;
@@ -610,11 +636,6 @@ h2 {
   gap: 4px;
 }
 
-.mode-row {
-  display: flex;
-  gap: 8px;
-}
-
 .mode-btn {
   font-size: 20px;
   min-height: 48px;
@@ -732,8 +753,7 @@ body.large-text .mode-blurb,
 body.large-text .stats,
 body.large-text .mini-title,
 body.large-text .name-input,
-body.large-text .setup-row .name-field,
-body.large-text .shuffle {
+body.large-text .setup-row .name-field {
   font-size: 1.25em;
 }
 
@@ -883,4 +903,47 @@ body.large-text .status b {
   color: #b3261e;
   font-size: 18px;
   text-align: center;
+}
+
+
+/* Share device or vs Computer, the step before Who's playing */
+.opponent-row {
+  display: flex;
+  gap: 16px;
+}
+
+.opponent-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 280px;
+  padding: 20px 16px;
+}
+
+.opponent-name {
+  font-size: 26px;
+}
+
+.opponent-note {
+  font-size: 17px;
+  color: var(--ink-soft);
+}
+
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+}
+
+.mode-select {
+  font: inherit;
+  font-size: 20px;
+  min-height: 48px;
+  padding: 4px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
 }

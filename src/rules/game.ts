@@ -1,4 +1,6 @@
+import { AI_NAME, chooseEasyShot } from "./ai.ts";
 import { ARMY, DEFAULT_NAMES, SHOT_RADIUS, UNIT_TYPES, type UnitType } from "./constants.ts";
+import { randomUnits } from "./layout.ts";
 import { POINTS, modeOf, type Mode, type ModeId } from "./modes.ts";
 import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
@@ -37,6 +39,8 @@ export interface Game {
   handoff: { to: PlayerIndex; then: "build" | "turn" } | null;
   /** Set when the game is over; null in a finished Score attack means a tie. */
   winner: PlayerIndex | null;
+  /** The player the computer plays in a single player game (always player 2), or absent for two players. */
+  ai?: PlayerIndex;
 }
 
 export type Failure =
@@ -59,9 +63,10 @@ function clone(game: Game): Game {
   return structuredClone(game);
 }
 
-export function createGame(opts: { seed: number; names?: [string?, string?]; mode?: ModeId }): Game {
+export function createGame(opts: { seed: number; names?: [string?, string?]; mode?: ModeId; vsComputer?: boolean }): Game {
   const rng = new Rng(opts.seed);
   const [a, b] = rng.shuffle(DEFAULT_NAMES);
+  const ai = opts.vsComputer ? { ai: 1 as PlayerIndex } : {};
   const firstShooter: PlayerIndex = rng.next() < 0.5 ? 0 : 1;
   const custom = (n?: string) => (n && n.trim() ? n.trim() : undefined);
   return {
@@ -72,7 +77,7 @@ export function createGame(opts: { seed: number; names?: [string?, string?]; mod
     phase: "build",
     players: [
       { name: custom(opts.names?.[0]) ?? (a as string), units: [], shots: [] },
-      { name: custom(opts.names?.[1]) ?? (b as string), units: [], shots: [] },
+      { name: opts.vsComputer ? AI_NAME : (custom(opts.names?.[1]) ?? (b as string)), units: [], shots: [] },
     ],
     building: 0,
     current: firstShooter,
@@ -81,6 +86,7 @@ export function createGame(opts: { seed: number; names?: [string?, string?]; mod
     shotFired: false,
     handoff: null,
     winner: null,
+    ...ai,
   };
 }
 
@@ -148,6 +154,16 @@ export function finishBuild(game: Game, player: PlayerIndex): Outcome {
   if (game.phase !== "build" || game.building !== player) return fail("wrong_phase");
   if (!isArmyComplete(game.players[player].units, modeOf(game.mode))) return fail("army_incomplete");
   const g = clone(game);
+  if (g.ai !== undefined) {
+    // Single player: the computer builds its base at once and play starts with no handoff screen.
+    const rng = new Rng(g.rngState);
+    g.players[g.ai].units = randomUnits(rng, modeOf(g.mode));
+    g.rngState = rng.state;
+    g.phase = "turn";
+    g.current = g.firstShooter;
+    g.shotFired = false;
+    return { ok: true, game: g };
+  }
   g.phase = "handoff";
   g.handoff = player === 0 ? { to: 1, then: "build" } : { to: g.firstShooter, then: "turn" };
   return { ok: true, game: g };
@@ -207,9 +223,31 @@ export function endTurn(game: Game): Outcome {
   if (!game.shotFired) return fail("shot_not_fired");
   const g = clone(game);
   g.turn += 1;
+  if (g.ai !== undefined) {
+    // Single player: nobody needs to look away, so the next turn starts straight away.
+    g.current = other(g.current);
+    g.shotFired = false;
+    return { ok: true, game: g };
+  }
   g.phase = "handoff";
   g.handoff = { to: other(g.current), then: "turn" };
   return { ok: true, game: g };
+}
+
+/**
+ * The computer's whole turn: one shot, then the turn passes back (unless the shot ended the game).
+ * It aims using only its own earlier shots, which is what its Enemy base view shows.
+ */
+export function playComputerTurn(game: Game): Outcome<{ result: ShotResult }> {
+  if (game.phase !== "turn" || game.ai === undefined || game.current !== game.ai) return fail("wrong_phase");
+  if (game.shotFired) return fail("shot_already_fired");
+  const rng = new Rng(game.rngState);
+  const aim = chooseEasyShot(game.players[game.ai].shots, modeOf(game.mode).grid, rng);
+  const fired = fire({ ...game, rngState: rng.state }, aim.x, aim.y);
+  if (!fired.ok) return fired;
+  if (fired.game.phase === "over") return fired;
+  const ended = endTurn(fired.game);
+  return ended.ok ? { ok: true, game: ended.game, result: fired.result } : ended;
 }
 
 /** A repeat spot is a new shot centre inside the circle of an earlier miss (the game shows a gentle warning). */

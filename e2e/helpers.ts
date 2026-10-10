@@ -32,7 +32,8 @@ export async function startNewGame(
 ): Promise<void> {
   await page.goto(`/?seed=${seed}`);
   await page.getByTestId("new-game").click();
-  await page.getByTestId(`mode-${mode}`).click();
+  await page.getByTestId("mode-select").selectOption(mode);
+  await page.getByTestId("opponent-share").click();
   if (names[0]) await page.getByTestId("name-1").fill(names[0]);
   if (names[1]) await page.getByTestId("name-2").fill(names[1]);
   await page.getByTestId("start-game").click();

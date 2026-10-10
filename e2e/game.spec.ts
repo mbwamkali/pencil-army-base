@@ -11,9 +11,10 @@ test("the menu opens How to play and explains that walls don't count", async ({ 
   await expect(page.getByTestId("menu")).toBeVisible();
 });
 
-test("setup shows two different pencil names already filled in, and Shuffle changes one without typing", async ({ page }) => {
+test("setup shows two different pencil names already filled in, and Random name changes one without typing", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("new-game").click();
+  await page.getByTestId("opponent-share").click();
   const one = page.getByTestId("name-1");
   const two = page.getByTestId("name-2");
   await expect(one).not.toHaveValue("");
@@ -37,6 +38,7 @@ test("names default to two different pencil officers and typed names are kept", 
   expect(first[0]).not.toBe(first[1]);
   await page.goto("/?seed=3");
   await page.getByTestId("new-game").click();
+  await page.getByTestId("opponent-share").click();
   await page.getByTestId("name-1").fill("Ana");
   await page.getByTestId("start-game").click();
   await expect(page.getByTestId("builder")).toHaveText("Ana");
@@ -81,11 +83,13 @@ test("a whole game: build, hand off, fire, end turn, win, play again", async ({ 
   await expect(page.getByTestId("winner")).toContainText(`${over.players[hunter]!.name} wins`);
   expect(shots).toBeGreaterThan(13);
 
+  // Play again skips setup: same players, same mode, straight into building.
   await page.getByTestId("play-again").click();
-  await expect(page.getByTestId("setup")).toBeVisible();
-  await page.getByTestId("start-game").click();
   await expect(page.getByTestId("builder")).toBeVisible();
-  expect((await savedGame(page)).phase).toBe("build");
+  const again = await savedGame(page);
+  expect(again.phase).toBe("build");
+  expect(again.mode).toBe(over.mode);
+  expect(again.players.map((p) => p.name)).toEqual(over.players.map((p) => p.name));
 });
 
 test("the Enemy base view never shows an undamaged enemy unit", async ({ page }) => {
