@@ -23,6 +23,10 @@ const legal = (units: readonly Unit[], grid: { w: number; h: number }) =>
 
 const key = (units: readonly Unit[]) => JSON.stringify([...units].sort((a, b) => a.id.localeCompare(b.id)));
 
+/** Every base the computer could get in Skirmish: each saved map, each of the four ways. */
+const skirmishFaces = () =>
+  new Set(mapsFor(MODES.skirmish).flatMap((m) => FLIPS.map((f) => key(flipUnits(m, MODES.skirmish.grid, f)))));
+
 describe("saved maps", () => {
   it("every saved map decodes to a legal base", () => {
     expect(SAVED_MAPS.length).toBeGreaterThan(0);
@@ -35,6 +39,8 @@ describe("saved maps", () => {
 
   it("only maps that fit the mode are offered, and a Battle map also serves Score attack", () => {
     expect(mapsFor(MODES.skirmish).length).toBeGreaterThan(0);
+    expect(mapsFor(MODES.battle).length).toBeGreaterThan(0);
+    expect(mapsFor(MODES.score)).toEqual(mapsFor(MODES.battle));
     const battle = encodeLayout("battle", randomUnits(new Rng(4), MODES.battle))!;
     expect(mapsFor(MODES.battle, [battle])).toHaveLength(1);
     expect(mapsFor(MODES.score, [battle])).toHaveLength(1);
@@ -42,7 +48,7 @@ describe("saved maps", () => {
   });
 
   it("bad codes are skipped instead of breaking the game", () => {
-    expect(mapsFor(MODES.skirmish, ["", "hello", "PAB1-AAAA", ...SAVED_MAPS])).toHaveLength(SAVED_MAPS.length);
+    expect(mapsFor(MODES.skirmish, ["", "hello", "PAB1-AAAA", ...SAVED_MAPS])).toEqual(mapsFor(MODES.skirmish));
   });
 });
 
@@ -77,16 +83,16 @@ describe("flipping", () => {
 });
 
 describe("the computer's base", () => {
-  it("uses a saved map, turned each of the four ways across games", () => {
-    const [map] = mapsFor(MODES.skirmish);
-    const faces = new Set(FLIPS.map((f) => key(flipUnits(map!, MODES.skirmish.grid, f))));
+  it("uses every saved map, turned each of the four ways across games", () => {
+    const faces = skirmishFaces();
+    expect(faces.size).toBe(4 * mapsFor(MODES.skirmish).length);
     const seen = new Set<string>();
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = 1; seed <= 200; seed++) {
       const k = key(computerBase(new Rng(seed), MODES.skirmish));
       expect(faces.has(k)).toBe(true);
       seen.add(k);
     }
-    expect(seen.size).toBe(4);
+    expect(seen.size).toBe(faces.size);
   });
 
   it("quietly builds a random base when no map fits", () => {
@@ -100,8 +106,7 @@ describe("the computer's base", () => {
   });
 
   it("a single player Skirmish game gives the computer a saved map", () => {
-    const [map] = mapsFor(MODES.skirmish);
-    const faces = new Set(FLIPS.map((f) => key(flipUnits(map!, MODES.skirmish.grid, f))));
+    const faces = skirmishFaces();
     let g = createGame({ seed: 5, mode: "skirmish", vsComputer: true });
     g = randomLayout(g, 0);
     const r = finishBuild(g, 0);
