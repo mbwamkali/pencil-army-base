@@ -1,4 +1,5 @@
 import type { Game } from "../rules/game.ts";
+import { MODE_IDS } from "../rules/modes.ts";
 
 const KEY = "pencil-army-base:game";
 
@@ -17,8 +18,8 @@ export function loadGame(): Game | null {
     if (!raw) return null;
     const g = JSON.parse(raw) as Game;
     if (g.version !== 1 || !Array.isArray(g.players) || g.players.length !== 2) return null;
-    // Games saved before modes existed were all Battle.
-    if (!g.mode) g.mode = "battle";
+    // Games saved before modes existed (or in a mode since removed) play as Battle.
+    if (!MODE_IDS.includes(g.mode)) g.mode = "battle";
     return g;
   } catch {
     return null;

@@ -21,7 +21,7 @@ export async function tapGrid(page: Page, gx: number, gy: number, grid: GridSize
   await page.mouse.click(p.x, p.y);
 }
 
-export type ModeName = "skirmish" | "battle" | "siege" | "score";
+export type ModeName = "skirmish" | "battle" | "score";
 
 /** Starts a game from the menu. Most tests use Battle (the full army); pass a mode to try another. */
 export async function startNewGame(

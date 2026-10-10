@@ -232,7 +232,7 @@ export function unitsLeft(units: readonly Unit[]): UnitsLeft {
   };
 }
 
-/** True when the fort and every tank and artillery are destroyed (the win rule for Skirmish and Siege). */
+/** True when the fort and every tank and artillery are destroyed (the win rule for Skirmish and Battle). */
 export function coreDestroyed(units: readonly Unit[]): boolean {
   return units.every((u) => !["fort", "tank", "artillery"].includes(u.type) || unitState(u) === "destroyed");
 }

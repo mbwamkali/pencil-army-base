@@ -67,10 +67,10 @@ function shoot(g: Game, x: number, y: number): Game {
 
 describe("mode presets", () => {
   it("has the four modes, with Skirmish smaller and the others the full army", () => {
-    expect(MODE_IDS).toEqual(["skirmish", "battle", "siege", "score"]);
+    expect(MODE_IDS).toEqual(["skirmish", "battle", "score"]);
     expect(MODES.skirmish.army).toEqual({ fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2 });
     expect(MODES.skirmish.grid).toEqual({ w: 12, h: 6 });
-    for (const id of ["battle", "siege", "score"] as const) {
+    for (const id of ["battle", "score"] as const) {
       expect(MODES[id].grid).toEqual({ w: 20, h: 10 });
       expect(MODES[id].army.tank).toBe(3);
     }
@@ -160,17 +160,6 @@ describe("win rules", () => {
     g = shoot(g, MISS_FULL.x, MISS_FULL.y);
     return g;
   }
-
-  it("Siege ends on the fort, tanks and artillery alone, with infantry still standing", () => {
-    const start = battle("siege", FREE);
-    const shooter = start.current;
-    let g = destroyCore("siege");
-    expect(g.phase).toBe("turn");
-    g = ok(fire(g, at("fort-1").x, at("fort-1").y));
-    expect(g.phase).toBe("over");
-    expect(g.winner).toBe(shooter);
-    expect(unitsLeft(g.players[shooter === 0 ? 1 : 0].units).byType.infantry).toBe(6);
-  });
 
   it("Battle ends the same way: infantry are optional", () => {
     const shooter = battle("battle", FREE).current;

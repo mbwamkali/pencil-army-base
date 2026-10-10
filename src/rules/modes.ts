@@ -1,6 +1,6 @@
 import { ARMY, GRID_H, GRID_W, type UnitType } from "./constants.ts";
 
-export const MODE_IDS = ["skirmish", "battle", "siege", "score"] as const;
+export const MODE_IDS = ["skirmish", "battle", "score"] as const;
 export type ModeId = (typeof MODE_IDS)[number];
 
 /**
@@ -45,14 +45,6 @@ export const MODES: Record<ModeId, Mode> = {
     id: "battle",
     name: "Battle",
     blurb: "Full army. Destroy the fort, every tank and every artillery. Infantry are optional.",
-    army: ARMY,
-    grid: FULL_GRID,
-    win: "core",
-  },
-  siege: {
-    id: "siege",
-    name: "Siege",
-    blurb: "Full army. Destroy the fort, tanks and artillery. Infantry only score points.",
     army: ARMY,
     grid: FULL_GRID,
     win: "core",
