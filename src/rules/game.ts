@@ -1,6 +1,6 @@
 import { AI_NAME, chooseEasyShot } from "./ai.ts";
+import { computerBase } from "./maps.ts";
 import { ARMY, DEFAULT_NAMES, SHOT_RADIUS, UNIT_TYPES, type UnitType } from "./constants.ts";
-import { randomUnits } from "./layout.ts";
 import { POINTS, modeOf, type Mode, type ModeId } from "./modes.ts";
 import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
@@ -157,7 +157,7 @@ export function finishBuild(game: Game, player: PlayerIndex): Outcome {
   if (g.ai !== undefined) {
     // Single player: the computer builds its base at once and play starts with no handoff screen.
     const rng = new Rng(g.rngState);
-    g.players[g.ai].units = randomUnits(rng, modeOf(g.mode));
+    g.players[g.ai].units = computerBase(rng, modeOf(g.mode));
     g.rngState = rng.state;
     g.phase = "turn";
     g.current = g.firstShooter;
