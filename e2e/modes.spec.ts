@@ -11,17 +11,18 @@ const panelFits = (page: Page) =>
 test("Skirmish is the default mode on the setup screen, and each mode shows what it is", async ({ page }) => {
   await page.goto("/");
   await page.getByTestId("new-game").click();
-  await expect(page.getByTestId("mode-skirmish")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("opponent-share").click();
+  await expect(page.getByTestId("mode-select")).toHaveValue("skirmish");
   await expect(page.getByTestId("mode-blurb")).toContainText("Small army");
-  await page.getByTestId("mode-score").click();
-  await expect(page.getByTestId("mode-score")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("mode-skirmish")).toHaveAttribute("aria-pressed", "false");
+  await page.getByTestId("mode-select").selectOption("score");
+  await expect(page.getByTestId("mode-select")).toHaveValue("score");
   await expect(page.getByTestId("mode-blurb")).toContainText("20 shots each");
-  await page.getByTestId("mode-battle").click();
+  await page.getByTestId("mode-select").selectOption("battle");
   await expect(page.getByTestId("mode-blurb")).toContainText("Infantry are optional");
   // Starting without touching the picker uses the default.
   await page.goto("/");
   await page.getByTestId("new-game").click();
+  await page.getByTestId("opponent-share").click();
   await page.getByTestId("start-game").click();
   expect((await savedGame(page)).mode).toBe("skirmish");
 });

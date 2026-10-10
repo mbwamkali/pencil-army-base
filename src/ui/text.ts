@@ -49,7 +49,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Playing the computer",
     body: [
-      "Choose vs Computer on the setup screen to play alone. The computer builds its own secret base and fires back after each of your turns. It plays fair: it only knows where its own shots hit or missed.",
+      "After New game, choose vs Computer to play alone, or Share device to play a friend on one phone. The computer builds its own secret base and fires back after each of your turns. It plays fair: it only knows where its own shots hit or missed.",
     ],
   },
   {

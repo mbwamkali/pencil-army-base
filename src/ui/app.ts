@@ -46,7 +46,7 @@ import { applySettings, setSetting, settings } from "./settings.ts";
 import { clearGame, loadGame, saveGame } from "./store.ts";
 import { ABOUT, HOW_TO_PLAY, describeIncoming, describeShot } from "./text.ts";
 
-type Screen = "menu" | "howto" | "setup" | "access" | "about" | "game";
+type Screen = "menu" | "howto" | "opponent" | "setup" | "access" | "about" | "game";
 
 interface Ui {
   screen: Screen;
@@ -132,7 +132,7 @@ export function render(): void {
   const game = ui.game;
   if (ui.screen !== "game" || !game) {
     node =
-      ui.screen === "howto" ? howToScreen() : ui.screen === "setup" ? setupScreen() : ui.screen === "access" ? accessScreen() : ui.screen === "about" ? aboutScreen() : menuScreen();
+      ui.screen === "howto" ? howToScreen() : ui.screen === "opponent" ? opponentScreen() : ui.screen === "setup" ? setupScreen() : ui.screen === "access" ? accessScreen() : ui.screen === "about" ? aboutScreen() : menuScreen();
   } else if (ui.gate !== null) {
     screenName = "handoff";
     node = handoffScreen(game.players[ui.gate].name, () => {
@@ -184,7 +184,7 @@ function menuScreen(): HTMLElement {
           onclick: () => {
             goFullscreen();
             ui.names = randomDefaultNames(Math.random);
-            ui.screen = "setup";
+            ui.screen = "opponent";
             render();
           },
         },
@@ -284,6 +284,36 @@ function accessScreen(): HTMLElement {
   );
 }
 
+function opponentScreen(): HTMLElement {
+  const choice = (vsComputer: boolean, testid: string, name: string, note: string) =>
+    el(
+      "button",
+      {
+        class: "btn opponent-btn",
+        "data-testid": testid,
+        onclick: () => {
+          ui.vsComputer = vsComputer;
+          ui.screen = "setup";
+          render();
+        },
+      },
+      el("span", { class: "opponent-name" }, name),
+      el("span", { class: "opponent-note" }, note),
+    );
+  return el(
+    "div",
+    { class: "screen center", "data-testid": "opponent" },
+    el("h2", {}, "How do you want to play?"),
+    el(
+      "div",
+      { class: "opponent-row" },
+      choice(false, "opponent-share", "Share device", "Two players take turns on this phone"),
+      choice(true, "opponent-computer", "vs Computer", `Play against ${AI_NAME}`),
+    ),
+    el("div", { class: "menu-buttons row" }, el("button", { class: "btn", "data-testid": "back", onclick: () => ((ui.screen = "menu"), render()) }, "Back")),
+  );
+}
+
 function setupScreen(): HTMLElement {
   const field = (i: 0 | 1) =>
     el(
@@ -319,53 +349,22 @@ function setupScreen(): HTMLElement {
         ),
       ),
     );
-  const opponentPicker = el(
-    "div",
-    { class: "mode-row", role: "group", "aria-label": "Opponent" },
-    el(
-      "button",
-      {
-        class: `btn mode-btn${ui.vsComputer ? "" : " on"}`,
-        "data-testid": "opponent-friend",
-        "aria-pressed": ui.vsComputer ? "false" : "true",
-        onclick: () => ((ui.vsComputer = false), render()),
-      },
-      "2 players",
-    ),
-    el(
-      "button",
-      {
-        class: `btn mode-btn${ui.vsComputer ? " on" : ""}`,
-        "data-testid": "opponent-computer",
-        "aria-pressed": ui.vsComputer ? "true" : "false",
-        onclick: () => ((ui.vsComputer = true), render()),
-      },
-      "vs Computer",
-    ),
-  );
   const modePicker = el(
     "div",
     { class: "mode-picker" },
     el(
-      "div",
-      { class: "mode-row" },
-      opponentPicker,
-      el("span", { class: "mode-divider", "aria-hidden": "true" }),
+      "label",
+      { class: "mode-label" },
+      "Mode",
       el(
-      "div",
-      { class: "mode-row", role: "group", "aria-label": "Game mode" },
-      MODE_IDS.map((id) =>
-        el(
-          "button",
-          {
-            class: `btn mode-btn${ui.mode === id ? " on" : ""}`,
-            "data-testid": `mode-${id}`,
-            "aria-pressed": ui.mode === id ? "true" : "false",
-            onclick: () => ((ui.mode = id), render()),
-          },
-          MODES[id].name,
-        ),
-      ),
+        "select",
+        {
+          class: "mode-select",
+          "data-testid": "mode-select",
+          "aria-label": "Game mode",
+          onchange: (e: Event) => ((ui.mode = (e.target as HTMLSelectElement).value as ModeId), render()),
+        },
+        MODE_IDS.map((id) => el("option", { value: id, selected: ui.mode === id }, MODES[id].name)),
       ),
     ),
     el("p", { class: "mode-blurb", "data-testid": "mode-blurb" }, MODES[ui.mode].blurb),
@@ -374,13 +373,12 @@ function setupScreen(): HTMLElement {
     "div",
     { class: "screen center", "data-testid": "setup" },
     el("h2", {}, "Who's playing?"),
-    el("p", { class: "subtitle" }, "Tap Shuffle for a different name, or type your own. Who shoots first is chosen at random."),
     el("div", { class: "setup-row" }, field(0), ui.vsComputer ? el("div", { class: "name-field", "data-testid": "computer-name" }, el("label", {}, "Player 2"), el("p", { class: "computer-name" }, `${AI_NAME} (computer)`)) : field(1)),
     modePicker,
     el(
       "div",
       { class: "menu-buttons row" },
-      el("button", { class: "btn", onclick: () => ((ui.screen = "menu"), render()) }, "Back"),
+      el("button", { class: "btn", "data-testid": "back", onclick: () => ((ui.screen = "opponent"), render()) }, "Back"),
       el(
         "button",
         {
@@ -907,6 +905,8 @@ function gameOverScreen(game: Game): HTMLElement {
           "data-testid": "play-again",
           onclick: () => {
             clearGame();
+            // Same opponent as last game, so straight to Who's playing.
+            ui.vsComputer = game.ai !== undefined;
             ui.game = null;
             ui.names = randomDefaultNames(Math.random);
             ui.screen = "setup";

@@ -610,11 +610,6 @@ h2 {
   gap: 4px;
 }
 
-.mode-row {
-  display: flex;
-  gap: 8px;
-}
-
 .mode-btn {
   font-size: 20px;
   min-height: 48px;
@@ -891,9 +886,44 @@ body.large-text .status b {
   font-size: 20px;
 }
 
-.mode-divider {
-  width: 2px;
-  align-self: stretch;
-  background: var(--ink);
-  opacity: 0.25;
+/* Share device or vs Computer, the step before Who's playing */
+.opponent-row {
+  display: flex;
+  gap: 16px;
+}
+
+.opponent-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 280px;
+  padding: 20px 16px;
+}
+
+.opponent-name {
+  font-size: 26px;
+}
+
+.opponent-note {
+  font-size: 17px;
+  color: var(--ink-soft);
+}
+
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 20px;
+}
+
+.mode-select {
+  font: inherit;
+  font-size: 20px;
+  min-height: 48px;
+  padding: 4px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
 }

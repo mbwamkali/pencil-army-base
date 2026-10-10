@@ -74,13 +74,25 @@ test("the Menu pauses the computer until it is closed", async ({ page }) => {
   expect((await savedGame(page)).players[1]!.shots.length).toBe(before + 1);
 });
 
-test("two player games still use the handoff screen", async ({ page }) => {
+test("Share device games still use the handoff screen", async ({ page }) => {
   await page.goto("/?seed=7");
   await page.getByTestId("new-game").click();
-  await expect(page.getByTestId("opponent-friend")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("opponent")).toBeVisible();
+  await page.getByTestId("opponent-share").click();
   await expect(page.getByTestId("name-2")).toBeVisible();
   await page.getByTestId("start-game").click();
   await page.getByTestId("random-layout").click();
   await page.getByTestId("done").click();
   await expect(page.getByTestId("handoff")).toBeVisible();
+});
+
+test("Back on Who's playing returns to the opponent choice", async ({ page }) => {
+  await page.goto("/?seed=7");
+  await page.getByTestId("new-game").click();
+  await page.getByTestId("opponent-computer").click();
+  await expect(page.getByTestId("setup")).toBeVisible();
+  await page.getByTestId("back").click();
+  await expect(page.getByTestId("opponent")).toBeVisible();
+  await page.getByTestId("back").click();
+  await expect(page.getByTestId("menu")).toBeVisible();
 });
