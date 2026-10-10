@@ -1,3 +1,4 @@
+import { applySettings } from "./ui/settings.ts";
 import "@fontsource/patrick-hand";
 import "./style.css";
 import { render } from "./ui/app.ts";
@@ -46,6 +47,7 @@ function fit(): void {
 window.addEventListener("resize", fit);
 window.addEventListener("orientationchange", fit);
 fit();
+applySettings();
 render();
 
 // Offline play: the service worker is written at build time (see vite.config.ts), so it exists only in the built game.
