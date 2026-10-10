@@ -85,7 +85,7 @@ test("the end screen saves an image of the final battlefield", async ({ page }) 
 
 test("the main menu shows the version, and About has credits, the version and a privacy note", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByTestId("version")).toHaveText(/^Version \d+\.\d+\.\d+$/);
+  await expect(page.getByTestId("version")).toHaveText(/^Version \d+\.\d+\.\d+( dev (\d+|local))?$/);
   const version = (await page.getByTestId("version").innerText()).replace("Version ", "");
   await page.getByTestId("about").click();
   const about = page.getByTestId("about-screen");
