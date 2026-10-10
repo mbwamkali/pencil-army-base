@@ -1,6 +1,8 @@
 import { UNIT_TYPES, type UnitType } from "../rules/constants.ts";
 import {
+  clearUnits,
   confirmHandoff,
+  coreLeft,
   createGame,
   nextDefaultName,
   randomDefaultNames,
@@ -9,6 +11,7 @@ import {
   fire,
   isArmyComplete,
   isRepeatOfMiss,
+  pointsByType,
   placeUnit,
   removeUnit,
   shotStats,
@@ -19,7 +22,7 @@ import {
   type PlayerIndex,
 } from "../rules/game.ts";
 import { randomLayout } from "../rules/layout.ts";
-import { DEFAULT_MODE, MODES, MODE_IDS, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
+import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
 import { placementProblem, snapWall, type Candidate } from "../rules/placement.ts";
 import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
@@ -34,11 +37,13 @@ import {
 } from "./board.ts";
 import { el, sv } from "./dom.ts";
 import { saveBattlefieldImage } from "./share.ts";
+import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
+import { VERSION } from "./version.ts";
 import { applySettings, setSetting, settings } from "./settings.ts";
 import { clearGame, loadGame, saveGame } from "./store.ts";
-import { HOW_TO_PLAY, describeIncoming, describeShot } from "./text.ts";
+import { ABOUT, HOW_TO_PLAY, describeIncoming, describeShot } from "./text.ts";
 
-type Screen = "menu" | "howto" | "setup" | "access" | "game";
+type Screen = "menu" | "howto" | "setup" | "access" | "about" | "game";
 
 interface Ui {
   screen: Screen;
@@ -56,7 +61,7 @@ interface Ui {
   popover: "you" | "enemy" | null;
   tip: string;
   /** In-game menu: closed, open (Resume / Main menu / New game), or asking before New game throws the game away. */
-  menu: "closed" | "open" | "confirm";
+  menu: "closed" | "open" | "confirm" | "clear";
 }
 
 const ui: Ui = {
@@ -113,7 +118,7 @@ export function render(): void {
   const game = ui.game;
   if (ui.screen !== "game" || !game) {
     node =
-      ui.screen === "howto" ? howToScreen() : ui.screen === "setup" ? setupScreen() : ui.screen === "access" ? accessScreen() : menuScreen();
+      ui.screen === "howto" ? howToScreen() : ui.screen === "setup" ? setupScreen() : ui.screen === "access" ? accessScreen() : ui.screen === "about" ? aboutScreen() : menuScreen();
   } else if (ui.gate !== null) {
     screenName = "handoff";
     node = handoffScreen(game.players[ui.gate].name, () => {
@@ -181,9 +186,15 @@ function menuScreen(): HTMLElement {
           },
           "Continue",
         ),
+    ),
+    el(
+      "div",
+      { class: "menu-links" },
       el("button", { class: "btn", "data-testid": "how-to-play", onclick: () => ((ui.screen = "howto"), render()) }, "How to play"),
       el("button", { class: "btn", "data-testid": "accessibility", onclick: () => ((ui.screen = "access"), render()) }, "Accessibility"),
+      el("button", { class: "btn", "data-testid": "about", onclick: () => ((ui.screen = "about"), render()) }, "About"),
     ),
+    el("p", { class: "version", "data-testid": "version" }, `Version ${VERSION}`),
   );
 }
 
@@ -206,6 +217,21 @@ function howToScreen(): HTMLElement {
       { class: "howto-scroll" },
       el("h2", {}, "How to play"),
       HOW_TO_PLAY.map((s) => [el("h3", {}, s.heading), s.body.map((t) => el("p", {}, t))]),
+    ),
+  );
+}
+
+function aboutScreen(): HTMLElement {
+  return el(
+    "div",
+    { class: "screen howto", "data-testid": "about-screen" },
+    el("button", { class: "btn back", onclick: () => ((ui.screen = "menu"), render()) }, "Back"),
+    el(
+      "div",
+      { class: "howto-scroll" },
+      el("h2", {}, "About"),
+      el("p", {}, `Pencil Army Base, version ${VERSION}.`),
+      ABOUT.map((s) => [el("h3", {}, s.heading), s.body.map((t) => el("p", {}, t))]),
     ),
   );
 }
@@ -488,7 +514,16 @@ function buildScreen(game: Game): HTMLElement {
   const panel = el(
     "div",
     { class: "panel" },
-    menuButton(),
+    el(
+      "div",
+      { class: "menu-row" },
+      menuButton(),
+      el(
+        "button",
+        { class: "btn menu-btn", "data-testid": "clear-all", disabled: units.length === 0, onclick: () => ((ui.menu = "clear"), render()) },
+        "Clear all",
+      ),
+    ),
     el("div", { class: "panel-name", "data-testid": "builder" }, game.players[player].name),
     sub,
     tray,
@@ -622,12 +657,16 @@ function battleScreen(game: Game): HTMLElement {
 
   const myLeft = unitsLeft(mine.units);
   const foeLeft = unitsLeft(theirs.units);
-  const counter = (label: string, n: number, which: "you" | "enemy") =>
+  // Skirmish and Battle: the counter shows what is left to destroy to win (fort, tanks, artillery), with infantry beneath it.
+  // Score attack ends early only when a whole army is gone, so it counts every fighting unit.
+  const byScore = mode.win === "score";
+  const counter = (label: string, units: readonly Unit[], which: "you" | "enemy") =>
     el(
       "button",
       { class: "counter", "data-testid": `counter-${which}`, onclick: () => ((ui.popover = ui.popover === which ? null : which), render()) },
       el("span", {}, label),
-      el("b", {}, `${n} / ${fightingCount(mode)}`),
+      el("b", {}, byScore ? `${unitsLeft(units).total} / ${fightingCount(mode)}` : `${coreLeft(units)} / ${coreCount(mode)}`),
+      !byScore && el("small", { "data-testid": `infantry-${which}` }, `+ ${unitsLeft(units).byType.infantry} infantry`),
     );
 
   const myPoints = scoreOf(mine);
@@ -640,7 +679,7 @@ function battleScreen(game: Game): HTMLElement {
   );
   const shotsEach = mode.shotsEach;
   const shotNumber = Math.min(mine.shots.length + (game.shotFired ? 0 : 1), shotsEach ?? Infinity);
-  const sub = shotsEach ? `Shot ${shotNumber} of ${shotsEach}` : `Turn ${game.turn}`;
+  const sub = `Shot ${shotNumber} of ${shotsEach}`;
 
   let action: HTMLButtonElement;
   if (!game.shotFired) {
@@ -686,10 +725,11 @@ function battleScreen(game: Game): HTMLElement {
     menuButton(),
     toggle,
     el("div", { class: "panel-name", "data-testid": "shooter" }, mine.name),
-    el("div", { class: "panel-sub", "data-testid": "turn" }, sub),
+    // Only Score attack needs a count on screen; elsewhere the room goes to the shot result.
+    shotsEach && el("div", { class: "panel-sub", "data-testid": "turn" }, sub),
     el("div", { class: "rule" }),
-    counter("You", myLeft.total, "you"),
-    counter("Enemy", foeLeft.total, "enemy"),
+    counter("You", mine.units, "you"),
+    counter("Enemy", theirs.units, "enemy"),
     points,
     el("div", { class: "rule" }),
     status,
@@ -730,23 +770,29 @@ function battleScreen(game: Game): HTMLElement {
 
 function gameOverScreen(game: Game): HTMLElement {
   const mode = modeOf(game.mode);
-  const mini = (20 * 20) / mode.grid.w;
+  const mini = (17 * 20) / mode.grid.w;
   const side = (p: PlayerIndex) => {
     const b = createBoard({ mode, sq: mini, tint: "own" });
     for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u), mirror: p === 1 }, mini);
     for (const s of game.players[other(p)].shots) drawShot(b.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, mini);
-    const left = unitsLeft(game.players[p].units).total;
+    const units = game.players[p].units;
+    const left = mode.win === "score" ? `${unitsLeft(units).total} / ${fightingCount(mode)} left` : `${coreLeft(units)} / ${coreCount(mode)} to destroy`;
     return el(
       "div",
       { class: "mini" },
-      el("div", { class: "mini-title" }, `${game.players[p].name}'s base`, el("span", {}, ` ${left} / ${fightingCount(mode)} left`)),
+      el("div", { class: "mini-title" }, `${game.players[p].name}'s base`, el("span", {}, ` ${left}`)),
       b.svg,
     );
   };
-  const stat = (p: PlayerIndex) => {
-    const s = shotStats(game.players[p]);
-    return `${game.players[p].name} hit with ${s.hits} of ${s.shots} shots, ${scoreOf(game.players[p])} points`;
-  };
+  const rows = summaryRows(game);
+  const summary = el(
+    "table",
+    { class: "summary", "data-testid": "summary" },
+    el("tr", {}, el("th", { class: "summary-name" }, "Points (hits)"), SUMMARY_HEADERS.map((h) => el("th", {}, h))),
+    rows.map((r, i) =>
+      el("tr", { "data-testid": `summary-${i}` }, el("td", { class: "summary-name" }, r.name), r.cells.map((c) => el("td", {}, c))),
+    ),
+  );
   return el(
     "div",
     { class: "screen over", "data-testid": "game-over" },
@@ -756,7 +802,7 @@ function gameOverScreen(game: Game): HTMLElement {
       game.winner === null ? "It's a tie!" : `${game.players[game.winner].name} wins!`,
     ),
     el("div", { class: "minis" }, side(0), side(1)),
-    el("p", { class: "stats" }, `${mode.name}. ${game.turn} turns. ${stat(0)}. ${stat(1)}.`),
+    summary,
     el(
       "div",
       { class: "menu-buttons row" },
@@ -810,7 +856,28 @@ function menuOverlay(): HTMLElement {
     render();
   };
   const buttons =
-    ui.menu === "confirm"
+    ui.menu === "clear"
+      ? [
+          el("p", { class: "menu-ask" }, "Remove all your units?"),
+          el(
+            "button",
+            {
+              class: "btn primary",
+              "data-testid": "clear-confirm",
+              onclick: () => {
+                ui.menu = "closed";
+                ui.tip = "";
+                const g = ui.game;
+                const r = g && g.phase === "build" ? clearUnits(g, g.building) : null;
+                if (r?.ok) setGame(r.game);
+                else render();
+              },
+            },
+            "Yes, clear all",
+          ),
+          el("button", { class: "btn", "data-testid": "clear-keep", onclick: close }, "No, keep them"),
+        ]
+      : ui.menu === "confirm"
       ? [
           el("p", { class: "menu-ask" }, "Throw away this game?"),
           el(
@@ -849,5 +916,5 @@ function menuOverlay(): HTMLElement {
           ),
           el("button", { class: "btn", "data-testid": "menu-new", onclick: () => ((ui.menu = "confirm"), render()) }, "New game"),
         ];
-  return el("div", { class: "menu-overlay", "data-testid": "menu-overlay" }, el("div", { class: "menu-card" }, el("h3", {}, "Menu"), ...buttons));
+  return el("div", { class: "menu-overlay", "data-testid": "menu-overlay" }, el("div", { class: "menu-card" }, el("h3", {}, ui.menu === "clear" ? "Clear all" : "Menu"), ...buttons));
 }

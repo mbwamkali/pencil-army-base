@@ -72,3 +72,8 @@ export function modeOf(id: ModeId | undefined): Mode {
 export function fightingCount(mode: Mode): number {
   return mode.army.fort + mode.army.tank + mode.army.artillery + mode.army.infantry;
 }
+
+/** The units a player must destroy to win a Skirmish or Battle: the fort, every tank and every artillery. */
+export function coreCount(mode: Mode): number {
+  return mode.army.fort + mode.army.tank + mode.army.artillery;
+}

@@ -106,25 +106,29 @@ test("the Target view never shows an undamaged enemy unit", async ({ page }) => 
   expect(states).toEqual(["damaged"]);
 });
 
-test("the counters start at 13, drop as units die, and show a breakdown", async ({ page }) => {
+test("the counters show what is left to destroy, with infantry beneath, and drop as units die", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);
-  await expect(page.getByTestId("counter-you")).toContainText("13 / 13");
-  await expect(page.getByTestId("counter-enemy")).toContainText("13 / 13");
+  await expect(page.getByTestId("counter-you")).toContainText("7 / 7");
+  await expect(page.getByTestId("counter-enemy")).toContainText("7 / 7");
+  await expect(page.getByTestId("infantry-enemy")).toHaveText("+ 6 infantry");
   const g = await savedGame(page);
   const foe = g.current === 0 ? 1 : 0;
-  const inf = g.players[foe]!.units.find((u) => u.type === "infantry")!;
+  const tank = g.players[foe]!.units.find((u) => u.type === "tank")!;
   await page.getByTestId("view-target").click();
-  const c = centreOfUnit(inf);
+  const c = centreOfUnit(tank);
   await tapGrid(page, c.x, c.y);
   await page.getByTestId("fire").click();
   const result = await page.getByTestId("result").innerText();
-  expect(result).toMatch(/Destroyed: Infantry|Wall hit/);
+  expect(result).toMatch(/Destroyed: Tank|Wall hit/);
   // One shot can catch several units, so count what the rules say is dead.
   const after = await savedGame(page);
-  const dead = after.players[foe]!.units.filter((u) => u.type !== "wall" && u.hits >= (u.type === "fort" ? 2 : 1)).length;
-  expect(dead).toBeGreaterThanOrEqual(result.startsWith("Destroyed") ? 1 : 0);
-  await expect(page.getByTestId("counter-enemy")).toContainText(`${13 - dead} / 13`);
+  const units = after.players[foe]!.units;
+  const core = units.filter((u) => ["tank", "artillery", "fort"].includes(u.type) && u.hits < (u.type === "fort" ? 2 : 1)).length;
+  const infantry = units.filter((u) => u.type === "infantry" && u.hits < 1).length;
+  expect(core).toBeLessThanOrEqual(result.startsWith("Destroyed") ? 6 : 7);
+  await expect(page.getByTestId("counter-enemy")).toContainText(`${core} / 7`);
+  await expect(page.getByTestId("infantry-enemy")).toHaveText(`+ ${infantry} infantry`);
   await page.getByTestId("counter-enemy").click();
   await expect(page.getByTestId("breakdown")).toContainText("Walls left");
 });

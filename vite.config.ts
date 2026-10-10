@@ -47,7 +47,11 @@ self.addEventListener("fetch", (e) => {
   };
 }
 
+const appVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
+
 export default defineConfig({
+  // The version in package.json, shown on the main menu and the About screen.
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // Relative paths so the build works from any folder, such as a GitHub Pages project site.
   base: "./",
   plugins: [offlineSupport()],
