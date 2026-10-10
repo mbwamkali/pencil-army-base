@@ -849,6 +849,10 @@ body.large-text .points b {
   font-size: 21px;
 }
 
+body.large-text .status {
+  font-size: 17px;
+}
+
 body.large-text .status b {
-  font-size: 21px;
+  font-size: 19px;
 }
