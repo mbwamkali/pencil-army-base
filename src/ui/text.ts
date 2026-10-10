@@ -66,7 +66,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     heading: "Taking your turn",
     body: [
       "Tap Start on the black screen. You'll see your own base, with your opponent's last shot marked.",
-      "Flip the switch to Target to see your opponent's base. It looks like blank paper, apart from the results of your earlier shots.",
+      "Flip the switch to Enemy base to see your opponent's base. It looks like blank paper, apart from the results of your earlier shots.",
       "Tap where you want to aim. A magnifier ring with a crosshair appears on the spot, and you can drag to adjust. Then tap Fire. You get one shot per turn.",
       "See the result straight away. Flip back to My base if you want to look again. Tap End turn and pass the phone.",
     ],
@@ -76,7 +76,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     body: [
       "Your shot is a circle a little bigger than one infantry square. Anything it touches is hit, so one lucky shot can hit more than one unit.",
       "Miss: a pencil mark stays on the paper so you know that spot is empty. Destroyed: the unit appears with a red cross through it. Fort damaged: your first hit on the fort shows it cracked, and one more hit destroys it. Wall hit: the wall takes the blow and is destroyed. Anything else under that shot is safe and stays hidden.",
-      "All your earlier shots stay on the Target view for the rest of the game, so use them to work out where the enemy is hiding.",
+      "All your earlier shots stay on the Enemy base view for the rest of the game, so use them to work out where the enemy is hiding.",
     ],
   },
   {

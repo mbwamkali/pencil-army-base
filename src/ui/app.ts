@@ -595,7 +595,7 @@ function battleScreen(game: Game): HTMLElement {
     statusLines.push(
       last && !game.shotFired ? `Their last shot ${describeIncoming(last)}.` : last ? "Viewing your base." : "No shots fired at you yet.",
     );
-    if (!game.shotFired) statusLines.push("Switch to Target to fire.");
+    if (!game.shotFired) statusLines.push("Switch to Enemy base to fire.");
   } else {
     const view = targetView(game, me);
     const untouched = view.shots.length === 0;
@@ -651,7 +651,7 @@ function battleScreen(game: Game): HTMLElement {
     el(
       "button",
       { class: `toggle-btn${ui.view === "target" ? " on" : ""}`, "data-testid": "view-target", onclick: () => ((ui.view = "target"), render()) },
-      "Target",
+      "Enemy base",
     ),
   );
 

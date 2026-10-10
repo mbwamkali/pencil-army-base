@@ -399,6 +399,7 @@ h2 {
   font-size: 15px;
   min-height: 52px;
   padding: 0 2px;
+  line-height: 1.05;
   border: 2px solid var(--ink);
   background: #fff;
   color: var(--ink);
