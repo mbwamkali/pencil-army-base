@@ -88,7 +88,7 @@ test("a whole game: build, hand off, fire, end turn, win, play again", async ({ 
   expect((await savedGame(page)).phase).toBe("build");
 });
 
-test("the Target view never shows an undamaged enemy unit", async ({ page }) => {
+test("the Enemy base view never shows an undamaged enemy unit", async ({ page }) => {
   await startNewGame(page, 11);
   await buildBothAndStart(page);
   await page.getByTestId("view-target").click();
