@@ -14,6 +14,8 @@ export const SAVED_MAPS: readonly string[] = [
   // Skirmish, from Jared (2026-10-10).
   "PAB1-WvVn4q1quIhwLs4",
   "PAB1-WuhrzIxeop1zZ0o",
+  // Battle (also used in Score attack), from Jared (2026-10-10).
+  "PAB1-W8XSdSYY5APNpKGjIdJogGqMh56e",
 ];
 
 /** The four ways a base can face: as saved, mirrored left to right, upside down, or both. */

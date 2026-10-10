@@ -39,6 +39,8 @@ describe("saved maps", () => {
 
   it("only maps that fit the mode are offered, and a Battle map also serves Score attack", () => {
     expect(mapsFor(MODES.skirmish).length).toBeGreaterThan(0);
+    expect(mapsFor(MODES.battle).length).toBeGreaterThan(0);
+    expect(mapsFor(MODES.score)).toEqual(mapsFor(MODES.battle));
     const battle = encodeLayout("battle", randomUnits(new Rng(4), MODES.battle))!;
     expect(mapsFor(MODES.battle, [battle])).toHaveLength(1);
     expect(mapsFor(MODES.score, [battle])).toHaveLength(1);
@@ -46,7 +48,7 @@ describe("saved maps", () => {
   });
 
   it("bad codes are skipped instead of breaking the game", () => {
-    expect(mapsFor(MODES.skirmish, ["", "hello", "PAB1-AAAA", ...SAVED_MAPS])).toHaveLength(SAVED_MAPS.length);
+    expect(mapsFor(MODES.skirmish, ["", "hello", "PAB1-AAAA", ...SAVED_MAPS])).toEqual(mapsFor(MODES.skirmish));
   });
 });
 
