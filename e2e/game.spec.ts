@@ -186,3 +186,44 @@ test("buttons are big enough for a thumb and nothing overflows the screen", asyn
   expect(overflow.x).toBeLessThanOrEqual(0);
   expect(overflow.y).toBeLessThanOrEqual(0);
 });
+
+test("the Menu button works while placing: Resume, Main menu then Continue, and New game asks first", async ({ page }) => {
+  await startNewGame(page, 7);
+  await page.getByTestId("menu-open").click();
+  await expect(page.getByTestId("menu-overlay")).toBeVisible();
+  await page.getByTestId("menu-resume").click();
+  await expect(page.getByTestId("menu-overlay")).toHaveCount(0);
+
+  await page.getByTestId("random-layout").click();
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-main").click();
+  await expect(page.getByTestId("menu")).toBeVisible();
+  await page.getByTestId("continue").click();
+  await expect(page.getByTestId("handoff")).toBeVisible();
+  await page.getByTestId("start").click();
+  await expect(page.getByTestId("builder")).toBeVisible();
+  await expect(page.locator("[data-unit]")).toHaveCount(17);
+
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-new").click();
+  await page.getByTestId("menu-keep").click();
+  await expect(page.getByTestId("builder")).toBeVisible();
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-new").click();
+  await page.getByTestId("menu-confirm-new").click();
+  await expect(page.getByTestId("setup")).toBeVisible();
+});
+
+test("the Menu button is also there during play, and the panel still fits", async ({ page }) => {
+  await startNewGame(page, 7);
+  await buildBothAndStart(page);
+  const fit = await page.evaluate(() => {
+    const panel = document.querySelector(".panel") as HTMLElement;
+    return panel.scrollHeight - panel.clientHeight;
+  });
+  expect(fit).toBeLessThanOrEqual(0);
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-new").click();
+  await page.getByTestId("menu-confirm-new").click();
+  await expect(page.getByTestId("setup")).toBeVisible();
+});
