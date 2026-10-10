@@ -1,8 +1,9 @@
 import { ARMY, DEFAULT_NAMES, SHOT_RADIUS } from "./constants.ts";
+import { POINTS, modeOf, type Mode, type ModeId } from "./modes.ts";
 import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
 import { resolveShot, type ShotResult } from "./shots.ts";
-import { ARMY_SLOTS, isFighting, typeOfId, unitState, type Unit } from "./units.ts";
+import { ARMY_SLOTS, armySlots, isFighting, typeOfId, unitState, type Unit } from "./units.ts";
 
 export type PlayerIndex = 0 | 1;
 export type Phase = "build" | "handoff" | "turn" | "over";
@@ -18,6 +19,8 @@ export interface PlayerState {
 /** The whole game as plain data, so it saves to the browser and replays exactly. */
 export interface Game {
   version: 1;
+  /** Which game mode this is (army, board size and how it ends). Saves from before modes were all Battle. */
+  mode: ModeId;
   seed: number;
   rngState: number;
   phase: Phase;
@@ -32,6 +35,7 @@ export interface Game {
   shotFired: boolean;
   /** Set during the black handoff screen: who to pass to and what starts when they tap Start. */
   handoff: { to: PlayerIndex; then: "build" | "turn" } | null;
+  /** Set when the game is over; null in a finished Score attack means a tie. */
   winner: PlayerIndex | null;
 }
 
@@ -55,13 +59,14 @@ function clone(game: Game): Game {
   return structuredClone(game);
 }
 
-export function createGame(opts: { seed: number; names?: [string?, string?] }): Game {
+export function createGame(opts: { seed: number; names?: [string?, string?]; mode?: ModeId }): Game {
   const rng = new Rng(opts.seed);
   const [a, b] = rng.shuffle(DEFAULT_NAMES);
   const firstShooter: PlayerIndex = rng.next() < 0.5 ? 0 : 1;
   const custom = (n?: string) => (n && n.trim() ? n.trim() : undefined);
   return {
     version: 1,
+    mode: opts.mode ?? "battle",
     seed: opts.seed,
     rngState: rng.state,
     phase: "build",
@@ -109,9 +114,10 @@ export function placeUnit(
 ): Outcome {
   if (game.phase !== "build" || game.building !== player) return fail("wrong_phase");
   const type = typeOfId(id);
-  if (!type) return fail("unknown_unit");
+  const mode = modeOf(game.mode);
+  if (!type || !armySlots(mode.army).some((s) => s.id === id)) return fail("unknown_unit");
   const others = game.players[player].units.filter((u) => u.id !== id);
-  const problem = placementProblem(others, { type, x, y, upright });
+  const problem = placementProblem(others, { type, x, y, upright }, mode.grid);
   if (problem) return fail(problem);
   const g = clone(game);
   g.players[player].units = [...others, { id, type, x, y, upright, hits: 0 }];
@@ -125,14 +131,14 @@ export function removeUnit(game: Game, player: PlayerIndex, id: string): Outcome
   return { ok: true, game: g };
 }
 
-export function isArmyComplete(units: readonly Unit[]): boolean {
-  return ARMY_SLOTS.every((s) => units.some((u) => u.id === s.id));
+export function isArmyComplete(units: readonly Unit[], mode: Mode = modeOf("battle")): boolean {
+  return armySlots(mode.army).every((s) => units.some((u) => u.id === s.id));
 }
 
 /** The player taps Done. Only works once every unit is placed. */
 export function finishBuild(game: Game, player: PlayerIndex): Outcome {
   if (game.phase !== "build" || game.building !== player) return fail("wrong_phase");
-  if (!isArmyComplete(game.players[player].units)) return fail("army_incomplete");
+  if (!isArmyComplete(game.players[player].units, modeOf(game.mode))) return fail("army_incomplete");
   const g = clone(game);
   g.phase = "handoff";
   g.handoff = player === 0 ? { to: 1, then: "build" } : { to: g.firstShooter, then: "turn" };
@@ -161,13 +167,28 @@ export function fire(game: Game, x: number, y: number): Outcome<{ result: ShotRe
   const g = clone(game);
   const shooter = g.players[g.current];
   const defender = g.players[other(g.current)];
-  const { units, result } = resolveShot(defender.units, x, y, g.turn);
+  const mode = modeOf(g.mode);
+  const { units, result } = resolveShot(defender.units, x, y, g.turn, mode.grid);
   defender.units = units;
   shooter.shots.push(result);
   g.shotFired = true;
-  if (unitsLeft(defender.units).total === 0) {
+  if (mode.win === "all" && unitsLeft(defender.units).total === 0) {
     g.phase = "over";
     g.winner = g.current;
+  } else if (mode.win === "core" && coreDestroyed(defender.units)) {
+    g.phase = "over";
+    g.winner = g.current;
+  } else if (mode.win === "score") {
+    // Both players fire the same number of shots, so the game can only end once the round is complete.
+    const roundDone = g.players[0].shots.length === g.players[1].shots.length;
+    const limitReached = g.players[0].shots.length >= (mode.shotsEach ?? Infinity);
+    const armyGone = unitsLeft(g.players[0].units).total === 0 || unitsLeft(g.players[1].units).total === 0;
+    if (roundDone && (limitReached || armyGone)) {
+      const a = scoreOf(g.players[0]);
+      const b = scoreOf(g.players[1]);
+      g.phase = "over";
+      g.winner = a === b ? null : a > b ? 0 : 1;
+    }
   }
   return { ok: true, game: g, result };
 }
@@ -209,6 +230,16 @@ export function unitsLeft(units: readonly Unit[]): UnitsLeft {
     fortDamaged: !!fort && unitState(fort) === "damaged",
     wallsLeft: count("wall"),
   };
+}
+
+/** True when the fort and every tank and artillery are destroyed (the win rule for Skirmish and Siege). */
+export function coreDestroyed(units: readonly Unit[]): boolean {
+  return units.every((u) => !["fort", "tank", "artillery"].includes(u.type) || unitState(u) === "destroyed");
+}
+
+/** A player's points: every hit they landed, by unit type. Walls score nothing. */
+export function scoreOf(player: PlayerState): number {
+  return player.shots.reduce((sum, s) => sum + s.hits.reduce((n, h) => n + POINTS[h.type], 0), 0);
 }
 
 export const FIGHTING_UNITS = ARMY.fort + ARMY.tank + ARMY.artillery + ARMY.infantry;

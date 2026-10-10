@@ -25,8 +25,15 @@ export const ARMY_SLOTS: readonly { id: string; type: UnitType }[] = UNIT_TYPES.
   Array.from({ length: ARMY[type] }, (_, i) => ({ id: `${type}-${i + 1}`, type })),
 );
 
+/** Every unit in the army of the given size, with a stable id, in tray order. */
+export function armySlots(army: Record<UnitType, number>): { id: string; type: UnitType }[] {
+  return UNIT_TYPES.flatMap((type) => Array.from({ length: army[type] }, (_, i) => ({ id: `${type}-${i + 1}`, type })));
+}
+
+/** The unit type an id belongs to ("tank-2" is a tank), or undefined if it is not a unit id. */
 export function typeOfId(id: string): UnitType | undefined {
-  return ARMY_SLOTS.find((s) => s.id === id)?.type;
+  const [type, n] = id.split("-");
+  return UNIT_TYPES.find((t) => t === type) && /^[1-9]\d*$/.test(n ?? "") ? (type as UnitType) : undefined;
 }
 
 export function sizeOf(type: UnitType, upright: boolean): { w: number; h: number } {

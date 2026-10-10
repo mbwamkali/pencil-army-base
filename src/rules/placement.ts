@@ -1,4 +1,5 @@
-import { GRID_H, GRID_W, WALL_SNAP_RANGE } from "./constants.ts";
+import { WALL_SNAP_RANGE } from "./constants.ts";
+import { FULL_GRID, type Grid } from "./modes.ts";
 import { rectOf, rectsOverlap, type Rect, type Unit } from "./units.ts";
 
 export type PlacementProblem =
@@ -15,10 +16,10 @@ export interface Candidate {
 }
 
 /** Why a unit cannot go here, or null if it can. `others` are the units already placed (not the one being moved). */
-export function placementProblem(others: readonly Unit[], c: Candidate): PlacementProblem | null {
+export function placementProblem(others: readonly Unit[], c: Candidate, grid: Grid = FULL_GRID): PlacementProblem | null {
   if (c.upright && c.type !== "wall") return "upright_only_for_walls";
   const r = rectOf(c);
-  if (r.x < 0 || r.y < 0 || r.x + r.w > GRID_W || r.y + r.h > GRID_H) return "out_of_bounds";
+  if (r.x < 0 || r.y < 0 || r.x + r.w > grid.w || r.y + r.h > grid.h) return "out_of_bounds";
   if (others.some((o) => rectsOverlap(r, rectOf(o)))) return "overlap";
   if (c.upright) {
     const fort = others.find((o) => o.type === "fort");

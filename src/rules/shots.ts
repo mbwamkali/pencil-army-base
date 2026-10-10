@@ -1,4 +1,5 @@
-import { GRID_H, GRID_W, SHOT_RADIUS } from "./constants.ts";
+import { SHOT_RADIUS } from "./constants.ts";
+import { FULL_GRID, type Grid } from "./modes.ts";
 import type { UnitType } from "./constants.ts";
 import { rectOf, unitState, type Rect, type Unit, type UnitState } from "./units.ts";
 
@@ -31,8 +32,8 @@ export function circleHitsRect(cx: number, cy: number, r: number, rect: Rect): b
   return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
 }
 
-export function clampShot(x: number, y: number): { x: number; y: number } {
-  return { x: Math.max(0, Math.min(GRID_W, x)), y: Math.max(0, Math.min(GRID_H, y)) };
+export function clampShot(x: number, y: number, grid: Grid = FULL_GRID): { x: number; y: number } {
+  return { x: Math.max(0, Math.min(grid.w, x)), y: Math.max(0, Math.min(grid.h, y)) };
 }
 
 /**
@@ -48,8 +49,9 @@ export function resolveShot(
   rawX: number,
   rawY: number,
   turn: number,
+  grid: Grid = FULL_GRID,
 ): { units: Unit[]; result: ShotResult } {
-  const { x, y } = clampShot(rawX, rawY);
+  const { x, y } = clampShot(rawX, rawY, grid);
   const touched = units.filter(
     (u) => unitState(u) !== "destroyed" && circleHitsRect(x, y, SHOT_RADIUS, rectOf(u)),
   );
