@@ -249,78 +249,18 @@
    {
     "x": 18,
     "y": 8
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 6.5,
-    "y": 1.5
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 8.5,
-    "y": 9.5
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 12.5,
-    "y": 6.5
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 19.5,
-    "y": 0.5
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 15.5,
-    "y": 5.5
-   },
-   {
-    "x": 5.5,
-    "y": 5.5
-   },
-   {
-    "x": 11.5,
-    "y": 8.5
    }
   ]
  },
  "expected": {
   "firstShooter": 1,
   "winner": 1,
-  "turns": 29,
-  "shots": 29,
+  "turns": 17,
+  "shots": 17,
   "outcomes": [
    "wall",
    "miss",
    "damaged",
-   "miss",
-   "destroyed",
-   "miss",
-   "destroyed",
-   "miss",
-   "destroyed",
-   "miss",
-   "destroyed",
-   "miss",
-   "destroyed",
-   "miss",
-   "destroyed",
    "miss",
    "destroyed",
    "miss",
@@ -344,15 +284,9 @@
    "tank-3",
    "artillery-1",
    "artillery-2",
-   "artillery-3",
-   "infantry-1",
-   "infantry-2",
-   "infantry-3",
-   "infantry-4",
-   "infantry-5",
-   "infantry-6"
+   "artillery-3"
   ],
-  "loserFightingLeft": 0,
+  "loserFightingLeft": 6,
   "loserWallsLeft": 3
  }
 }

@@ -172,20 +172,14 @@ describe("win rules", () => {
     expect(unitsLeft(g.players[shooter === 0 ? 1 : 0].units).byType.infantry).toBe(6);
   });
 
-  it("Battle is not over after the same shots, and needs the infantry too", () => {
+  it("Battle ends the same way: infantry are optional", () => {
     const shooter = battle("battle", FREE).current;
     let g = destroyCore("battle");
-    g = shoot(g, at("fort-1").x, at("fort-1").y);
-    g = shoot(g, MISS_FULL.x, MISS_FULL.y);
     expect(g.phase).toBe("turn");
-    for (const id of infantryIds.slice(0, 5)) {
-      g = shoot(g, at(id).x, at(id).y);
-      g = shoot(g, MISS_FULL.x, MISS_FULL.y);
-    }
-    expect(g.phase).toBe("turn");
-    g = ok(fire(g, at("infantry-6").x, at("infantry-6").y));
+    g = ok(fire(g, at("fort-1").x, at("fort-1").y));
     expect(g.phase).toBe("over");
     expect(g.winner).toBe(shooter);
+    expect(unitsLeft(g.players[shooter === 0 ? 1 : 0].units).byType.infantry).toBe(6);
   });
 });
 

@@ -44,10 +44,10 @@ export const MODES: Record<ModeId, Mode> = {
   battle: {
     id: "battle",
     name: "Battle",
-    blurb: "Full army. Destroy every unit except walls.",
+    blurb: "Full army. Destroy the fort, every tank and every artillery. Infantry are optional.",
     army: ARMY,
     grid: FULL_GRID,
-    win: "all",
+    win: "core",
   },
   siege: {
     id: "siege",
