@@ -1,4 +1,5 @@
 import { confirmHandoff, createGame, endTurn, finishBuild, fire, placeUnit, type Game, type PlayerIndex } from "./game.ts";
+import type { ModeId } from "./modes.ts";
 import type { ShotResult } from "./shots.ts";
 
 export interface Placement {
@@ -12,6 +13,7 @@ export interface Placement {
 export interface GameRecord {
   seed: number;
   names?: [string?, string?];
+  mode?: ModeId;
   layouts: [Placement[], Placement[]];
   shots: { x: number; y: number }[];
 }
@@ -23,7 +25,7 @@ function must<T extends { ok: boolean }>(o: T, what: string): Extract<T, { ok: t
 
 /** Play a recorded game through the rules from start to finish (or until the shots run out). */
 export function replay(record: GameRecord): { game: Game; results: ShotResult[] } {
-  let game = createGame({ seed: record.seed, names: record.names });
+  let game = createGame({ seed: record.seed, names: record.names, mode: record.mode });
   for (const p of [0, 1] as PlayerIndex[]) {
     for (const u of record.layouts[p]) {
       game = must(placeUnit(game, p, u.id, u.x, u.y, u.upright ?? false), `placing ${u.id}`).game;

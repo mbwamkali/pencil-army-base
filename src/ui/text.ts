@@ -41,9 +41,16 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     ],
   },
   {
+    heading: "Game modes",
+    body: [
+      "Pick a mode when you start a game. Skirmish (the default) is a small army on a small board. Battle is the full army on the full board. Siege is the full army, but you only need to destroy the fort, tanks and artillery. Score attack is the full army with 20 shots each, and the most points wins.",
+    ],
+  },
+  {
     heading: "Your army",
     body: [
-      "Both players get the same 17 units: 1 fort (3 x 3 squares, takes 2 hits), 3 tanks and 3 artillery (2 x 2 squares), 6 infantry (1 square) and 4 walls (2 x 1 squares). Bigger units are easier for your opponent to hit.",
+      "In Battle, Siege and Score attack both players get the same 17 units: 1 fort (3 x 3 squares, takes 2 hits), 3 tanks and 3 artillery (2 x 2 squares), 6 infantry (1 square) and 4 walls (2 x 1 squares). Bigger units are easier for your opponent to hit.",
+      "Skirmish uses 1 fort, 1 tank, 1 artillery, 2 infantry and 2 walls.",
       "Walls don't count. Walls are there to protect your army, not to fight. They are not included in the units-left counter, and you don't need to destroy them to win. The counter starts at 13: your fort, tanks, artillery and infantry.",
     ],
   },
@@ -81,7 +88,8 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Winning",
     body: [
-      "The first player to destroy all 13 of the other side's fighting units (fort, tanks, artillery and infantry) wins. Walls left standing don't matter. When the game ends, both bases are revealed so you can see the near misses.",
+      "Battle: the first player to destroy all 13 of the other side's fighting units (fort, tanks, artillery and infantry) wins. Skirmish and Siege: destroy the fort and every tank and artillery. Infantry are optional, but they still score points. Score attack: after 20 shots each, the higher score wins. Walls left standing never matter. When the game ends, both bases are revealed so you can see the near misses.",
+      "Points show on the side panel in every mode. Each hit scores: infantry 1, tank 3, artillery 3, fort 5 (on each of its two hits), walls 0.",
       "Tips: spread your infantry out so one shot can't catch several. Walls protect the edges of your fort, but a sharp shot aimed at its centre can still get through.",
     ],
   },

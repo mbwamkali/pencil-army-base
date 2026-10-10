@@ -599,3 +599,49 @@ h2 {
   justify-content: center;
   margin-top: 0;
 }
+
+/* Game modes */
+.mode-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn {
+  font-size: 20px;
+  min-height: 48px;
+  padding: 4px 16px;
+}
+
+.mode-btn.on {
+  background: var(--ink);
+  color: #fff;
+}
+
+.mode-blurb {
+  margin: 0;
+  font-size: 18px;
+  color: var(--ink-soft);
+  max-width: 620px;
+  min-height: 44px;
+}
+
+.points {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 4px;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.points b {
+  font-size: 22px;
+  font-weight: normal;
+}

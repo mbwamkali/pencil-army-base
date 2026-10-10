@@ -1,10 +1,4 @@
-import {
-  ARMY,
-  GRID_H,
-  GRID_W,
-  UNIT_TYPES,
-  type UnitType,
-} from "../rules/constants.ts";
+import { UNIT_TYPES, type UnitType } from "../rules/constants.ts";
 import {
   confirmHandoff,
   createGame,
@@ -18,20 +12,21 @@ import {
   placeUnit,
   removeUnit,
   shotStats,
+  scoreOf,
   unitsLeft,
-  FIGHTING_UNITS,
   type Failure,
   type Game,
   type PlayerIndex,
 } from "../rules/game.ts";
 import { randomLayout } from "../rules/layout.ts";
+import { DEFAULT_MODE, MODES, MODE_IDS, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
 import { placementProblem, snapWall, type Candidate } from "../rules/placement.ts";
-import { ARMY_SLOTS, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
+import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
 import { UNIT_LABEL, unitArt } from "./art.ts";
 import {
-  SQ,
   createBoard,
+  sqFor,
   drawMagnifier,
   drawShot,
   drawUnit,
@@ -46,6 +41,8 @@ type Screen = "menu" | "howto" | "setup" | "game";
 interface Ui {
   screen: Screen;
   names: [string, string];
+  /** Mode picked on the setup screen; Skirmish unless the player chooses another. */
+  mode: ModeId;
   game: Game | null;
   /** Shown after loading a saved game: the phone may have changed hands, so cover the base first. */
   gate: PlayerIndex | null;
@@ -61,6 +58,7 @@ interface Ui {
 const ui: Ui = {
   screen: "menu",
   names: ["", ""],
+  mode: DEFAULT_MODE,
   game: null,
   gate: null,
   view: "mine",
@@ -240,12 +238,34 @@ function setupScreen(): HTMLElement {
         ),
       ),
     );
+  const modePicker = el(
+    "div",
+    { class: "mode-picker" },
+    el(
+      "div",
+      { class: "mode-row", role: "group", "aria-label": "Game mode" },
+      MODE_IDS.map((id) =>
+        el(
+          "button",
+          {
+            class: `btn mode-btn${ui.mode === id ? " on" : ""}`,
+            "data-testid": `mode-${id}`,
+            "aria-pressed": ui.mode === id ? "true" : "false",
+            onclick: () => ((ui.mode = id), render()),
+          },
+          MODES[id].name,
+        ),
+      ),
+    ),
+    el("p", { class: "mode-blurb", "data-testid": "mode-blurb" }, MODES[ui.mode].blurb),
+  );
   return el(
     "div",
     { class: "screen center", "data-testid": "setup" },
     el("h2", {}, "Who's playing?"),
     el("p", { class: "subtitle" }, "Tap Shuffle for a different name, or type your own. Who shoots first is chosen at random."),
     el("div", { class: "setup-row" }, field(0), field(1)),
+    modePicker,
     el(
       "div",
       { class: "menu-buttons row" },
@@ -262,7 +282,7 @@ function setupScreen(): HTMLElement {
             ui.gate = null;
             ui.view = "mine";
             ui.aim = null;
-            setGame(createGame({ seed: seedFor(), names: [ui.names[0], ui.names[1]] }));
+            setGame(createGame({ seed: seedFor(), names: [ui.names[0], ui.names[1]], mode: ui.mode }));
           },
         },
         "Start",
@@ -305,7 +325,9 @@ const TOUCH_LIFT = 0.8;
 function buildScreen(game: Game): HTMLElement {
   const player = game.building;
   const units = game.players[player].units;
-  const board = createBoard({ tint: "own", testid: "board" });
+  const mode = modeOf(game.mode);
+  const board = createBoard({ mode, tint: "own", testid: "board" });
+  const SQ = board.sq;
   const tip = el("p", { class: "tip", "data-testid": "tip" }, ui.tip);
   let dragId: string | null = null;
 
@@ -340,11 +362,11 @@ function buildScreen(game: Game): HTMLElement {
       const g = board.toGrid(ev);
       const cx = g.x;
       const cy = g.y - lift;
-      inGrid = cx >= 0 && cx <= GRID_W && cy >= 0 && cy <= GRID_H;
+      inGrid = cx >= 0 && cx <= mode.grid.w && cy >= 0 && cy <= mode.grid.h;
       const size = sizeOf(type, false);
       cand = { type, upright: false, x: Math.round(cx - size.w / 2), y: Math.round(cy - size.h / 2) };
       if (type === "wall" && fort) cand = snapWall(fort, cx, cy) ?? cand;
-      valid = placementProblem(others, cand) === null;
+      valid = placementProblem(others, cand, mode.grid) === null;
       board.overlay.replaceChildren();
       if (!inGrid) return;
       const r = rectOf(cand);
@@ -372,7 +394,7 @@ function buildScreen(game: Game): HTMLElement {
         const r = placeUnit(game, player, id, cand.x, cand.y, cand.upright);
         if (r.ok) return setGame(r.game);
       } else if (cand && inGrid && !valid) {
-        ui.tip = PROBLEM_TIP[placementProblem(others, cand) as Failure] ?? "";
+        ui.tip = PROBLEM_TIP[placementProblem(others, cand, mode.grid) as Failure] ?? "";
       } else if (fromGrid && !inGrid) {
         const r = removeUnit(game, player, id);
         if (r.ok) return setGame(r.game);
@@ -398,13 +420,14 @@ function buildScreen(game: Game): HTMLElement {
     if (u) startDrag(e, u.id, u.type, true, board.svg);
   });
 
+  const slots = armySlots(mode.army);
   const placedCount = (t: UnitType) => units.filter((u) => u.type === t).length;
   const tray = el(
     "div",
     { class: "tray" },
     UNIT_TYPES.map((type) => {
-      const left = ARMY[type] - placedCount(type);
-      const nextId = ARMY_SLOTS.find((s) => s.type === type && !units.some((u) => u.id === s.id))?.id;
+      const left = mode.army[type] - placedCount(type);
+      const nextId = slots.find((s) => s.type === type && !units.some((u) => u.id === s.id))?.id;
       return el(
         "div",
         {
@@ -421,7 +444,7 @@ function buildScreen(game: Game): HTMLElement {
     }),
   );
 
-  const complete = isArmyComplete(units);
+  const complete = isArmyComplete(units, mode);
   const panel = el(
     "div",
     { class: "panel" },
@@ -429,7 +452,7 @@ function buildScreen(game: Game): HTMLElement {
     el("div", { class: "panel-sub" }, "Build your base"),
     tray,
     tip,
-    !complete && !ui.tip && el("p", { class: "tip calm" }, `Place ${ARMY_SLOTS.length - units.length} more`),
+    !complete && !ui.tip && el("p", { class: "tip calm" }, `Place ${slots.length - units.length} more`),
     el("div", { class: "spacer" }),
     el(
       "button",
@@ -476,6 +499,8 @@ function battleScreen(game: Game): HTMLElement {
   const lastShot = mine.shots.at(-1);
   const justFired = game.shotFired ? lastShot : undefined;
   const over = game.phase === "over";
+  const mode = modeOf(game.mode);
+  const SQ = sqFor(mode);
 
   let board: Board;
   let fireButton: HTMLButtonElement | null = null;
@@ -483,7 +508,7 @@ function battleScreen(game: Game): HTMLElement {
   const statusLines: (string | HTMLElement)[] = [];
 
   if (ui.view === "mine") {
-    board = createBoard({ tint: "own", testid: "board" });
+    board = createBoard({ mode, tint: "own", testid: "board" });
     for (const u of mine.units) drawUnit(board.units, { ...u, state: unitState(u) }, SQ);
     const incoming = theirs.shots;
     incoming.forEach((s, i) => {
@@ -500,7 +525,7 @@ function battleScreen(game: Game): HTMLElement {
   } else {
     const view = targetView(game, me);
     const untouched = view.shots.length === 0;
-    board = createBoard({ tint: "target", label: untouched ? `${theirs.name}'s base (hidden)` : undefined, testid: "board" });
+    board = createBoard({ mode, tint: "target", label: untouched ? `${theirs.name}'s base (hidden)` : undefined, testid: "board" });
     for (const u of view.revealed) drawUnit(board.units, { ...u, state: u.state }, SQ);
     for (const s of view.shots) drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
     if (justFired) {
@@ -524,7 +549,7 @@ function battleScreen(game: Game): HTMLElement {
     let aiming = false;
     const setAim = (e: PointerEvent) => {
       const g = board.toGrid(e);
-      ui.aim = { x: Math.max(0, Math.min(GRID_W, g.x)), y: Math.max(0, Math.min(GRID_H, g.y)) };
+      ui.aim = { x: Math.max(0, Math.min(mode.grid.w, g.x)), y: Math.max(0, Math.min(mode.grid.h, g.y)) };
       drawAim();
     };
     board.svg.addEventListener("pointerdown", (e) => {
@@ -563,8 +588,20 @@ function battleScreen(game: Game): HTMLElement {
       "button",
       { class: "counter", "data-testid": `counter-${which}`, onclick: () => ((ui.popover = ui.popover === which ? null : which), render()) },
       el("span", {}, label),
-      el("b", {}, `${n} / ${FIGHTING_UNITS}`),
+      el("b", {}, `${n} / ${fightingCount(mode)}`),
     );
+
+  const myPoints = scoreOf(mine);
+  const foePoints = scoreOf(theirs);
+  const points = el(
+    "div",
+    { class: "points", "data-testid": "points" },
+    el("span", {}, "Points"),
+    el("b", {}, el("span", { "data-testid": "points-you" }, myPoints), " : ", el("span", { "data-testid": "points-enemy" }, foePoints)),
+  );
+  const shotsEach = mode.shotsEach;
+  const shotNumber = Math.min(mine.shots.length + (game.shotFired ? 0 : 1), shotsEach ?? Infinity);
+  const sub = shotsEach ? `Shot ${shotNumber} of ${shotsEach}` : `Turn ${game.turn}`;
 
   let action: HTMLButtonElement;
   if (!game.shotFired) {
@@ -609,10 +646,11 @@ function battleScreen(game: Game): HTMLElement {
     { class: "panel" },
     toggle,
     el("div", { class: "panel-name", "data-testid": "shooter" }, mine.name),
-    el("div", { class: "panel-sub", "data-testid": "turn" }, `Turn ${game.turn}`),
+    el("div", { class: "panel-sub", "data-testid": "turn" }, sub),
     el("div", { class: "rule" }),
     counter("You", myLeft.total, "you"),
     counter("Enemy", foeLeft.total, "enemy"),
+    points,
     el("div", { class: "rule" }),
     status,
     el("div", { class: "spacer" }),
@@ -651,29 +689,34 @@ function battleScreen(game: Game): HTMLElement {
 // Game over
 
 function gameOverScreen(game: Game): HTMLElement {
-  const winner = game.winner ?? 0;
+  const mode = modeOf(game.mode);
+  const mini = (20 * 20) / mode.grid.w;
   const side = (p: PlayerIndex) => {
-    const b = createBoard({ sq: 20, tint: "own" });
-    for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u) }, 20);
-    for (const s of game.players[other(p)].shots) drawShot(b.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, 20);
+    const b = createBoard({ mode, sq: mini, tint: "own" });
+    for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u) }, mini);
+    for (const s of game.players[other(p)].shots) drawShot(b.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, mini);
     const left = unitsLeft(game.players[p].units).total;
     return el(
       "div",
       { class: "mini" },
-      el("div", { class: "mini-title" }, `${game.players[p].name}'s base`, el("span", {}, ` ${left} / ${FIGHTING_UNITS} left`)),
+      el("div", { class: "mini-title" }, `${game.players[p].name}'s base`, el("span", {}, ` ${left} / ${fightingCount(mode)} left`)),
       b.svg,
     );
   };
   const stat = (p: PlayerIndex) => {
     const s = shotStats(game.players[p]);
-    return `${game.players[p].name} hit with ${s.hits} of ${s.shots} shots`;
+    return `${game.players[p].name} hit with ${s.hits} of ${s.shots} shots, ${scoreOf(game.players[p])} points`;
   };
   return el(
     "div",
     { class: "screen over", "data-testid": "game-over" },
-    el("h2", { class: "winner", "data-testid": "winner" }, `${game.players[winner].name} wins!`),
+    el(
+      "h2",
+      { class: "winner", "data-testid": "winner" },
+      game.winner === null ? "It's a tie!" : `${game.players[game.winner].name} wins!`,
+    ),
     el("div", { class: "minis" }, side(0), side(1)),
-    el("p", { class: "stats" }, `${game.turn} turns. ${stat(0)}. ${stat(1)}.`),
+    el("p", { class: "stats" }, `${mode.name}. ${game.turn} turns. ${stat(0)}. ${stat(1)}.`),
     el(
       "div",
       { class: "menu-buttons row" },

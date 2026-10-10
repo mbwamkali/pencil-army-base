@@ -1,10 +1,19 @@
-import { FOOTPRINT, GRID_H, GRID_W, type UnitType } from "../rules/constants.ts";
+import { FOOTPRINT, type UnitType } from "../rules/constants.ts";
+import { MODES, type Mode } from "../rules/modes.ts";
 import { rectOf, type UnitState } from "../rules/units.ts";
 import { artUrl, unitArt } from "./art.ts";
 import { sv } from "./dom.ts";
 
 /** Points per grid square on a full-screen base (grid 20 x 10 = 760 x 380). */
 export const SQ = 38;
+
+/** Width in pixels of every base on the stage, whatever its size: a small board just gets bigger squares. */
+const BOARD_WIDTH = 20 * SQ;
+
+/** Pixels per grid square for a mode, so the board always fills the same area. */
+export function sqFor(mode: Mode): number {
+  return BOARD_WIDTH / mode.grid.w;
+}
 
 export interface DrawUnit {
   id: string;
@@ -70,8 +79,11 @@ export interface Board {
   toGrid(e: { clientX: number; clientY: number }): { x: number; y: number };
 }
 
-export function createBoard(opts: { sq?: number; tint: "own" | "target"; label?: string; testid?: string }): Board {
-  const sq = opts.sq ?? SQ;
+export function createBoard(opts: { mode?: Mode; sq?: number; tint: "own" | "target"; label?: string; testid?: string }): Board {
+  const mode = opts.mode ?? MODES.battle;
+  const GRID_W = mode.grid.w;
+  const GRID_H = mode.grid.h;
+  const sq = opts.sq ?? sqFor(mode);
   const w = GRID_W * sq;
   const h = GRID_H * sq;
   const worldId = `world-${++boardCount}`;
@@ -128,7 +140,8 @@ export function createBoard(opts: { sq?: number; tint: "own" | "target"; label?:
 /** One circle centered on the aim point: a zoomed view of the squares under it, with the shot ring and crosshair on top. */
 export function drawMagnifier(board: Board, ax: number, ay: number): void {
   const { sq, overlay } = board;
-  const zoom = 1.6;
+  // Squares are bigger on a small board, so zoom less there; the lens stays about the same size.
+  const zoom = Math.max(1.15, (1.6 * SQ) / sq);
   const shotRadius = 0.875 * sq * zoom;
   const radius = shotRadius + 8;
   const cx = ax * sq;

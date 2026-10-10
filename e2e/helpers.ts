@@ -6,20 +6,33 @@ export async function savedGame(page: Page): Promise<Game> {
 }
 
 /** Screen position of a point on the board, given in grid squares. */
-export async function gridPoint(page: Page, gx: number, gy: number): Promise<{ x: number; y: number }> {
+export type GridSize = { w: number; h: number };
+export const FULL: GridSize = { w: 20, h: 10 };
+export const SMALL: GridSize = { w: 12, h: 6 };
+
+export async function gridPoint(page: Page, gx: number, gy: number, grid: GridSize = FULL): Promise<{ x: number; y: number }> {
   const box = await page.getByTestId("board").boundingBox();
   if (!box) throw new Error("no board on screen");
-  return { x: box.x + (gx / 20) * box.width, y: box.y + (gy / 10) * box.height };
+  return { x: box.x + (gx / grid.w) * box.width, y: box.y + (gy / grid.h) * box.height };
 }
 
-export async function tapGrid(page: Page, gx: number, gy: number): Promise<void> {
-  const p = await gridPoint(page, gx, gy);
+export async function tapGrid(page: Page, gx: number, gy: number, grid: GridSize = FULL): Promise<void> {
+  const p = await gridPoint(page, gx, gy, grid);
   await page.mouse.click(p.x, p.y);
 }
 
-export async function startNewGame(page: Page, seed = 7, names: [string, string] = ["", ""]): Promise<void> {
+export type ModeName = "skirmish" | "battle" | "siege" | "score";
+
+/** Starts a game from the menu. Most tests use Battle (the full army); pass a mode to try another. */
+export async function startNewGame(
+  page: Page,
+  seed = 7,
+  names: [string, string] = ["", ""],
+  mode: ModeName = "battle",
+): Promise<void> {
   await page.goto(`/?seed=${seed}`);
   await page.getByTestId("new-game").click();
+  await page.getByTestId(`mode-${mode}`).click();
   if (names[0]) await page.getByTestId("name-1").fill(names[0]);
   if (names[1]) await page.getByTestId("name-2").fill(names[1]);
   await page.getByTestId("start-game").click();

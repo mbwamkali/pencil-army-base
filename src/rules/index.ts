@@ -1,6 +1,7 @@
 export * from "./constants.ts";
 export * from "./game.ts";
 export * from "./layout.ts";
+export * from "./modes.ts";
 export * from "./placement.ts";
 export * from "./replay.ts";
 export * from "./rng.ts";
