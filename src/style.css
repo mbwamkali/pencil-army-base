@@ -857,3 +857,30 @@ body.large-text .status {
 body.large-text .status b {
   font-size: 19px;
 }
+
+.menu-pair {
+  display: flex;
+  gap: 8px;
+}
+
+.menu-pair .btn {
+  white-space: nowrap;
+  flex: 1;
+}
+
+.code-input {
+  min-width: 300px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 18px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+
+.paste-error {
+  margin: 0;
+  max-width: 320px;
+  color: #b3261e;
+  font-size: 18px;
+  text-align: center;
+}

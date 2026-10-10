@@ -184,3 +184,62 @@ for (const large of [false, true]) {
     expect(gap).toBeGreaterThanOrEqual(-0.5);
   });
 }
+
+test("Copy layout and Paste layout bring back the same base, and a bad code shows an error", async ({ page }) => {
+  await startNewGame(page, 5, ["", ""], "skirmish");
+  await page.getByTestId("menu-open").click();
+  await expect(page.getByTestId("menu-copy")).toBeDisabled();
+  await page.getByTestId("menu-resume").click();
+
+  await page.getByTestId("random-layout").click();
+  const built = (await savedGame(page)).players[0]!.units;
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-copy").click();
+  const code = await page.getByTestId("copy-code").inputValue();
+  expect(code).toMatch(/^PAB1-[A-Za-z0-9_-]+$/);
+  await page.getByTestId("copy-done").click();
+
+  // A bad code is refused with a message and the base stays as it was.
+  for (const junk of ["", "not a code", code.slice(0, -4)]) {
+    await page.getByTestId("menu-open").click();
+    await page.getByTestId("menu-paste").click();
+    await page.getByTestId("paste-input").fill(junk);
+    await page.getByTestId("paste-load").click();
+    await expect(page.getByTestId("paste-error")).toBeVisible();
+    await page.getByTestId("paste-cancel").click();
+    await expect(page.getByTestId("menu-overlay")).toHaveCount(0);
+    expect((await savedGame(page)).players[0]!.units).toEqual(built);
+  }
+
+  await page.getByTestId("clear-all").click();
+  await page.getByTestId("clear-confirm").click();
+  await expect(page.locator("[data-unit]")).toHaveCount(0);
+
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-paste").click();
+  await page.getByTestId("paste-input").fill(code);
+  await page.getByTestId("paste-load").click();
+  await expect(page.getByTestId("menu-overlay")).toHaveCount(0);
+  await expect(page.locator("[data-unit]")).toHaveCount(7);
+  const byId = (us: { id: string }[]) => [...us].sort((a, b) => a.id.localeCompare(b.id));
+  expect(byId((await savedGame(page)).players[0]!.units)).toEqual(byId(built));
+  await expect(page.getByTestId("done")).toBeEnabled();
+});
+
+test("a code from another mode is refused by name", async ({ page }) => {
+  await startNewGame(page, 5, ["", ""], "battle");
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-paste").click();
+  await page.getByTestId("paste-input").fill("PAB1-WvZU0fhPsJpz7gA");
+  await page.getByTestId("paste-load").click();
+  await expect(page.getByTestId("paste-error")).toHaveText("That code is for Skirmish, but this game is Battle.");
+  await expect(page.locator("[data-unit]")).toHaveCount(0);
+});
+
+test("Copy and Paste layout are only in the Menu while building", async ({ page }) => {
+  await startNewGame(page, 7, ["", ""], "skirmish");
+  await buildBothAndStart(page);
+  await page.getByTestId("menu-open").click();
+  await expect(page.getByTestId("menu-copy")).toHaveCount(0);
+  await expect(page.getByTestId("menu-paste")).toHaveCount(0);
+});

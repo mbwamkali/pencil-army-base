@@ -21,6 +21,7 @@ import {
   type Game,
   type PlayerIndex,
 } from "../rules/game.ts";
+import { encodeLayout, pasteLayout, type CodeProblem } from "../rules/code.ts";
 import { randomLayout } from "../rules/layout.ts";
 import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
 import { placementProblem, snapWall, type Candidate } from "../rules/placement.ts";
@@ -61,7 +62,12 @@ interface Ui {
   popover: "you" | "enemy" | null;
   tip: string;
   /** In-game menu: closed, open (Resume / Main menu / New game), or asking before New game throws the game away. */
-  menu: "closed" | "open" | "confirm" | "clear";
+  menu: "closed" | "open" | "confirm" | "clear" | "copy" | "paste";
+  /** Copy layout: the code on show, and whether it reached the clipboard. */
+  copied: { code: string; ok: boolean } | null;
+  /** Paste layout: what is typed in the box, and why the last code was refused ("" before trying). */
+  pasteText: string;
+  pasteError: string;
 }
 
 const ui: Ui = {
@@ -77,6 +83,9 @@ const ui: Ui = {
   popover: null,
   tip: "",
   menu: "closed",
+  copied: null,
+  pasteText: "",
+  pasteError: "",
 };
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
@@ -850,13 +859,83 @@ function menuButton(): HTMLElement {
   return el("button", { class: "btn menu-btn", "data-testid": "menu-open", onclick: () => ((ui.menu = "open"), render()) }, "Menu");
 }
 
+const PASTE_ERROR: Record<CodeProblem, string> = {
+  empty: "Paste a layout code first.",
+  bad_code: "That code isn't valid. Check it was copied in full.",
+  wrong_mode: "",
+  bad_placement: "That code has units where they can't go.",
+};
+
+/** Copy layout: puts the builder's code on the clipboard and shows it in case the clipboard is blocked. */
+function copyLayout(): void {
+  const g = ui.game;
+  const code = g ? encodeLayout(g.mode, g.players[g.building].units) : null;
+  if (!code) return;
+  ui.copied = { code, ok: false };
+  ui.menu = "copy";
+  render();
+  navigator.clipboard
+    ?.writeText(code)
+    .then(() => {
+      if (ui.copied?.code === code) {
+        ui.copied.ok = true;
+        render();
+      }
+    })
+    .catch(() => {});
+}
+
+function tryPaste(text: string): void {
+  const g = ui.game;
+  if (!g || g.phase !== "build") return;
+  const r = pasteLayout(g, g.building, text);
+  if (r.ok) {
+    ui.menu = "closed";
+    ui.tip = "";
+    ui.pasteError = "";
+    ui.pasteText = "";
+    setGame(r.game);
+    return;
+  }
+  ui.pasteError =
+    r.reason === "wrong_mode" && "mode" in r && r.mode
+      ? `That code is for ${MODES[r.mode].name}, but this game is ${modeOf(g.mode).name}.`
+      : (PASTE_ERROR as Record<string, string>)[r.reason] || PASTE_ERROR.bad_code;
+  render();
+}
+
 function menuOverlay(): HTMLElement {
   const close = () => {
     ui.menu = "closed";
     render();
   };
+  const building = ui.game?.phase === "build" ? ui.game : null;
+  const pasteInput = el("input", {
+    class: "code-input",
+    "data-testid": "paste-input",
+    type: "text",
+    placeholder: "PAB1-…",
+    autocomplete: "off",
+    spellcheck: "false",
+    value: ui.pasteText,
+    oninput: (e: Event) => (ui.pasteText = (e.target as HTMLInputElement).value),
+  }) as HTMLInputElement;
   const buttons =
-    ui.menu === "clear"
+    ui.menu === "copy" && ui.copied
+      ? [
+          el("p", { class: "menu-ask", "data-testid": "copy-status" }, ui.copied.ok ? "Copied. Paste it anywhere." : "Copy this code:"),
+          el("input", { class: "code-input", "data-testid": "copy-code", type: "text", readonly: "true", value: ui.copied.code, onfocus: (e: Event) => (e.target as HTMLInputElement).select() }),
+          el("button", { class: "btn primary", "data-testid": "copy-done", onclick: close }, "Done"),
+        ]
+      : ui.menu === "paste"
+      ? [
+          el("p", { class: "menu-ask" }, "Paste a layout code"),
+          pasteInput,
+          ui.pasteError && el("p", { class: "paste-error", "data-testid": "paste-error", role: "alert" }, ui.pasteError),
+          el("button", { class: "btn primary", "data-testid": "paste-load", onclick: () => tryPaste(pasteInput.value) }, "Load"),
+          el("button", { class: "btn", "data-testid": "paste-cancel", onclick: close }, "Cancel"),
+        ]
+      : ui.menu === "clear"
       ? [
           el("p", { class: "menu-ask" }, "Remove all your units?"),
           el(
@@ -914,7 +993,24 @@ function menuOverlay(): HTMLElement {
             },
             "Main menu",
           ),
+          building &&
+            el(
+              "div",
+              { class: "menu-pair" },
+              el(
+                "button",
+                {
+                  class: "btn",
+                  "data-testid": "menu-copy",
+                  disabled: !isArmyComplete(building.players[building.building].units, modeOf(building.mode)),
+                  onclick: copyLayout,
+                },
+                "Copy layout",
+              ),
+              el("button", { class: "btn", "data-testid": "menu-paste", onclick: () => ((ui.menu = "paste"), (ui.pasteError = ""), render()) }, "Paste layout"),
+            ),
           el("button", { class: "btn", "data-testid": "menu-new", onclick: () => ((ui.menu = "confirm"), render()) }, "New game"),
         ];
-  return el("div", { class: "menu-overlay", "data-testid": "menu-overlay" }, el("div", { class: "menu-card" }, el("h3", {}, ui.menu === "clear" ? "Clear all" : "Menu"), ...buttons));
+  const title = ui.menu === "clear" ? "Clear all" : ui.menu === "copy" ? "Copy layout" : ui.menu === "paste" ? "Paste layout" : "Menu";
+  return el("div", { class: "menu-overlay", "data-testid": "menu-overlay" }, el("div", { class: "menu-card" }, el("h3", {}, title), ...buttons));
 }
