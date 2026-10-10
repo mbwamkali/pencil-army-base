@@ -47,6 +47,12 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     ],
   },
   {
+    heading: "Playing the computer",
+    body: [
+      "Choose vs Computer on the setup screen to play alone. The computer builds its own secret base and fires back after each of your turns. It plays fair: it only knows where its own shots hit or missed.",
+    ],
+  },
+  {
     heading: "Your army",
     body: [
       "In Battle and Score attack both players get the same 17 units: 1 fort (3 x 3 squares, takes 2 hits), 3 tanks and 3 artillery (2 x 2 squares), 6 infantry (1 square) and 4 walls (2 x 1 squares). Bigger units are easier for your opponent to hit.",

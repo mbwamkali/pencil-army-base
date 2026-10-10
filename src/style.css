@@ -884,3 +884,16 @@ body.large-text .status b {
   font-size: 18px;
   text-align: center;
 }
+
+.computer-name {
+  margin: 0;
+  padding: 10px 0;
+  font-size: 20px;
+}
+
+.mode-divider {
+  width: 2px;
+  align-self: stretch;
+  background: var(--ink);
+  opacity: 0.25;
+}
