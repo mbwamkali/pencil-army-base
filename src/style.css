@@ -589,6 +589,18 @@ h2 {
   font-weight: normal;
 }
 
+/* Picked for tap-to-place: darker, with a solid edge. */
+.tray-item.selected {
+  background: var(--ink);
+  border-style: solid;
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.tray-item.selected img {
+  filter: invert(1);
+}
+
 /* Game over */
 .over {
   padding: 8px 20px 0;
@@ -945,5 +957,21 @@ body.large-text .status b {
   border: 2px solid var(--ink);
   border-radius: 8px;
   background: var(--paper);
+  color: var(--ink);
+}
+
+/* vs Computer: You win! / You lose pop-up over the end screen */
+.result-card {
+  align-items: center;
+  min-width: 280px;
+}
+
+.result-card h3 {
+  font-size: 40px;
+}
+
+.result-face {
+  width: 96px;
+  height: 96px;
   color: var(--ink);
 }
