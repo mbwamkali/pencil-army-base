@@ -1,7 +1,7 @@
 import { SHOT_RADIUS } from "./constants.ts";
 import { FULL_GRID, type Grid } from "./modes.ts";
 import type { UnitType } from "./constants.ts";
-import { rectOf, unitState, type Rect, type Unit, type UnitState } from "./units.ts";
+import { hitRectOf, unitState, type Rect, type Unit, type UnitState } from "./units.ts";
 
 export type ShotOutcome = "miss" | "wall" | "damaged" | "destroyed";
 
@@ -39,7 +39,7 @@ export function clampShot(x: number, y: number, grid: Grid = FULL_GRID): { x: nu
 /**
  * Resolve one shot against a base. Pure: returns the changed units and what happened.
  *
- * - Every unit the circle overlaps takes one hit, but units already destroyed are ignored.
+ * - Every unit whose drawing the circle overlaps (see hitRectOf) takes one hit, but units already destroyed are ignored.
  * - If the circle touches a standing wall, the wall(s) absorb the blow: they are destroyed and
  *   every other unit under the shot is unharmed. Destroyed walls no longer protect anything.
  * - Forts take two hits (normal -> damaged -> destroyed); everything else takes one.
@@ -53,7 +53,7 @@ export function resolveShot(
 ): { units: Unit[]; result: ShotResult } {
   const { x, y } = clampShot(rawX, rawY, grid);
   const touched = units.filter(
-    (u) => unitState(u) !== "destroyed" && circleHitsRect(x, y, SHOT_RADIUS, rectOf(u)),
+    (u) => unitState(u) !== "destroyed" && circleHitsRect(x, y, SHOT_RADIUS, hitRectOf(u)),
   );
   const walls = touched.filter((u) => u.type === "wall");
   const struck = walls.length > 0 ? walls : touched;

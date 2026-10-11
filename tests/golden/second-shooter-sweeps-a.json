@@ -254,7 +254,7 @@
   "turns": 16,
   "shots": 16,
   "outcomes": [
-   "destroyed",
+   "miss",
    "damaged",
    "miss",
    "destroyed",
@@ -272,7 +272,6 @@
    "destroyed"
   ],
   "destroyedInOrder": [
-   "artillery-1",
    "fort-1",
    "tank-1",
    "tank-2",

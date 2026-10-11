@@ -1,4 +1,4 @@
-import { UNIT_TYPES, type UnitType } from "../rules/constants.ts";
+import { SHOT_RADIUS, UNIT_TYPES, type UnitType } from "../rules/constants.ts";
 import {
   clearUnits,
   confirmHandoff,
@@ -778,7 +778,7 @@ function battleScreen(game: Game): HTMLElement {
     incoming.forEach((s, i) => {
       drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
       if (i === incoming.length - 1) {
-        board.marks.append(sv("circle", { cx: s.x * SQ, cy: s.y * SQ, r: 0.95 * SQ, class: "last-shot" }));
+        board.marks.append(sv("circle", { cx: s.x * SQ, cy: s.y * SQ, r: SHOT_RADIUS * SQ, class: "last-shot" }));
       }
     });
     const last = incoming.at(-1);
@@ -793,7 +793,7 @@ function battleScreen(game: Game): HTMLElement {
     for (const u of view.revealed) drawUnit(board.units, { ...u, state: u.state, mirror: me !== 1 }, SQ);
     for (const s of view.shots) drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
     if (justFired) {
-      board.marks.append(sv("circle", { cx: justFired.x * SQ, cy: justFired.y * SQ, r: 0.95 * SQ, class: "last-shot" }));
+      board.marks.append(sv("circle", { cx: justFired.x * SQ, cy: justFired.y * SQ, r: SHOT_RADIUS * SQ, class: "last-shot" }));
       statusLines.push(el("b", { "data-testid": "result" }, describeShot(justFired)));
     } else {
       statusLines.push(ui.aim ? "Tap Fire, or tap the same spot again." : "Tap the paper to aim.");
