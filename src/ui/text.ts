@@ -113,7 +113,7 @@ export const ABOUT: { heading: string; body: string[] }[] = [
   {
     heading: "Privacy",
     body: [
-      "This game collects nothing. There are no accounts, no ads and no tracking, and nothing you do is sent anywhere. Your game in progress and your accessibility choices are saved only in this browser on this device, and Play again or New game clears the saved game.",
+      "This game collects nothing. There are no accounts, no ads and no tracking, and nothing you do is sent anywhere. Your game in progress and your accessibility choices are saved only on this device, and Play again or New game clears the saved game.",
     ],
   },
 ];
