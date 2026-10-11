@@ -2,7 +2,7 @@ import type { Game, PlayerIndex } from "../rules/game.ts";
 import { coreLeft, unitsLeft } from "../rules/game.ts";
 import { coreCount, fightingCount, modeOf } from "../rules/modes.ts";
 import { rectOf, unitState } from "../rules/units.ts";
-import { FOOTPRINT } from "../rules/constants.ts";
+import { FOOTPRINT, SHOT_ART_SIZE } from "../rules/constants.ts";
 import { artUrl, unitArt } from "./art.ts";
 import { SHIELD_PATH } from "./board.ts";
 import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
@@ -92,7 +92,8 @@ export async function renderBattlefield(game: Game): Promise<HTMLCanvasElement> 
     const enemy: PlayerIndex = p === 0 ? 1 : 0;
     for (const s of game.players[enemy].shots) {
       const img = await loadImage(artUrl(s.hits.length > 0 ? "shot-hit" : "shot-miss"));
-      ctx.drawImage(img, x0 + s.x * sq - sq, y0 + s.y * sq - sq, 2 * sq, 2 * sq);
+      const side = SHOT_ART_SIZE * sq;
+      ctx.drawImage(img, x0 + s.x * sq - side / 2, y0 + s.y * sq - side / 2, side, side);
     }
     for (const u of game.players[p].units) {
       const r = rectOf(u);

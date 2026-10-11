@@ -35,17 +35,23 @@ describe("shots", () => {
     expect(unitState(byId(units, "infantry-1"))).toBe("destroyed");
   });
 
-  it("hits when the circle edge reaches a unit and misses just beyond", () => {
-    const inf = [u("infantry-1", "infantry", 3, 4)]; // occupies x 3-4, y 4-5
-    expect(resolveShot(inf, 4.8, 4.5, 1).result.outcome).toBe("destroyed"); // 0.8 from the edge
-    expect(resolveShot(inf, 4.9, 4.5, 1).result.outcome).toBe("miss"); // 0.9 from the edge
+  it("hits when the circle edge reaches a unit's drawing and misses just beyond", () => {
+    const inf = [u("infantry-1", "infantry", 3, 4)]; // drawn over x 3.15-3.85, y 4.1-4.95
+    expect(resolveShot(inf, 4.65, 4.5, 1).result.outcome).toBe("destroyed"); // 0.8 from the drawing
+    expect(resolveShot(inf, 4.75, 4.5, 1).result.outcome).toBe("miss"); // 0.9 from the drawing
+  });
+
+  it("misses the empty paper above a tank's drawing", () => {
+    const tank = [u("tank-1", "tank", 3, 3)]; // squares y 3-5, but the tank is drawn over y 3.7-4.7
+    expect(resolveShot(tank, 4, 2.7, 1).result.outcome).toBe("miss"); // 0.3 above the squares, 1.0 above the tank
+    expect(resolveShot(tank, 4, 3, 1).result.outcome).toBe("destroyed"); // 0.7 above the tank
   });
 
   it("measures to the corner, not the bounding box", () => {
-    const inf = [u("infantry-1", "infantry", 3, 3)];
-    // 0.6 right and 0.6 below the corner (4,4): distance 0.85 -> hit; 0.65 each -> 0.92 -> miss
-    expect(resolveShot(inf, 4.6, 4.6, 1).result.outcome).toBe("destroyed");
-    expect(resolveShot(inf, 4.65, 4.65, 1).result.outcome).toBe("miss");
+    const inf = [u("infantry-1", "infantry", 3, 3)]; // drawing's lower right corner is (3.85, 3.95)
+    // 0.6 right and 0.6 below that corner: distance 0.85 -> hit; 0.65 each -> 0.92 -> miss
+    expect(resolveShot(inf, 4.45, 4.55, 1).result.outcome).toBe("destroyed");
+    expect(resolveShot(inf, 4.5, 4.6, 1).result.outcome).toBe("miss");
   });
 
   it("reaches tanks, artillery and the fort", () => {

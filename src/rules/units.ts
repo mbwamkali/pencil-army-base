@@ -1,4 +1,4 @@
-import { ARMY, FOOTPRINT, HITS_TO_DESTROY, UNIT_TYPES, type UnitType } from "./constants.ts";
+import { ARMY, FOOTPRINT, HIT_INSET, HITS_TO_DESTROY, UNIT_TYPES, type UnitType } from "./constants.ts";
 
 export type UnitState = "normal" | "damaged" | "destroyed";
 
@@ -44,6 +44,15 @@ export function sizeOf(type: UnitType, upright: boolean): { w: number; h: number
 export function rectOf(u: Pick<Unit, "type" | "x" | "y" | "upright">): Rect {
   const { w, h } = sizeOf(u.type, u.upright);
   return { x: u.x, y: u.y, w, h };
+}
+
+/** The part of a unit a shot can hit: its drawing, approximately (see HIT_INSET). */
+export function hitRectOf(u: Pick<Unit, "type" | "x" | "y" | "upright">): Rect {
+  const r = rectOf(u);
+  const { side, top, bottom } = HIT_INSET[u.type];
+  // Standing upright turns the drawing a quarter turn anticlockwise: its top ends up on the left.
+  const [left, right, up, down] = u.upright ? [top, bottom, side, side] : [side, side, top, bottom];
+  return { x: r.x + left, y: r.y + up, w: r.w - left - right, h: r.h - up - down };
 }
 
 export function unitState(u: Pick<Unit, "type" | "hits">): UnitState {

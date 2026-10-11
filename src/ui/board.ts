@@ -1,4 +1,4 @@
-import { FOOTPRINT, type UnitType } from "../rules/constants.ts";
+import { FOOTPRINT, SHOT_ART_SIZE, SHOT_RADIUS, type UnitType } from "../rules/constants.ts";
 import { MODES, type Mode } from "../rules/modes.ts";
 import type { ShotResult } from "../rules/shots.ts";
 import { rectOf, type UnitState } from "../rules/units.ts";
@@ -77,9 +77,9 @@ export function drawUnit(parent: Element, u: DrawUnit, sq: number, opts: { opaci
   return g;
 }
 
-/** Shot marks come in a 2 x 2 square box; the smudge inside is about 1.75 squares across. */
+/** Shot marks are drawn just inside the hit circle, so a smudge touching a unit always means a hit. */
 export function drawShotImage(parent: Element, name: string, x: number, y: number, sq: number): SVGImageElement {
-  const side = 2 * sq;
+  const side = SHOT_ART_SIZE * sq;
   const img = sv("image", { href: artUrl(name), x: x * sq - side / 2, y: y * sq - side / 2, width: side, height: side });
   parent.append(img);
   return img;
@@ -206,7 +206,7 @@ export function drawMagnifier(board: Board, ax: number, ay: number): void {
   const { sq, overlay } = board;
   // Squares are bigger on a small board, so zoom less there; the lens stays about the same size.
   const zoom = Math.max(1.15, (1.6 * SQ) / sq);
-  const shotRadius = 0.875 * sq * zoom;
+  const shotRadius = SHOT_RADIUS * sq * zoom;
   const radius = shotRadius + 8;
   const cx = ax * sq;
   const cy = ay * sq;
