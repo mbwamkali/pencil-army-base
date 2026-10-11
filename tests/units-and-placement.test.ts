@@ -11,6 +11,7 @@ import {
   rectOf,
   removeUnit,
   snapWall,
+  turnWall,
   unitsLeft,
   type Unit,
 } from "../src/rules/index.ts";
@@ -169,5 +170,40 @@ describe("wall snapping", () => {
       walls.push({ id: `wall-${i + 1}`, ...c, hits: 0 });
     });
     expect(walls).toHaveLength(4);
+  });
+});
+
+describe("tapping a wall to turn it", () => {
+  const fort = unit("fort-1", "fort", 8, 3);
+
+  it("turns a lone wall a quarter turn about its centre when it would stand upright beside the fort", () => {
+    // Flat wall just left of the fort's top row, sticking out to the left.
+    const turned = turnWall([fort], { x: 6, y: 3, upright: false });
+    expect(turned).toEqual({ type: "wall", upright: true, x: 7, y: 3 });
+  });
+
+  it("lays an upright wall flat again, and a second tap stands it back up", () => {
+    const flat = turnWall([fort], { x: 7, y: 3, upright: true })!;
+    expect(flat).toMatchObject({ upright: false });
+    expect(placementProblem([fort], flat)).toBeNull();
+    expect(turnWall([fort], flat)).toEqual({ type: "wall", upright: true, x: 7, y: 3 });
+  });
+
+  it("snaps a wall on top of the fort round to the nearest side, since it can only stand upright there", () => {
+    const turned = turnWall([fort], { x: 8, y: 2, upright: false });
+    expect(turned).toMatchObject({ upright: true });
+    expect(placementProblem([fort], turned!)).toBeNull();
+    expect(turned!.x === 7 || turned!.x === 11).toBe(true);
+  });
+
+  it("won't stand a wall upright far from the fort", () => {
+    expect(turnWall([fort], { x: 0, y: 8, upright: false })).toBeNull();
+  });
+
+  it("finds another spot beside the fort when the nearest one is taken", () => {
+    const blocker = unit("infantry-1", "infantry", 7, 3);
+    const turned = turnWall([fort, blocker], { x: 6, y: 3, upright: false });
+    expect(turned).toMatchObject({ upright: true });
+    expect(placementProblem([fort, blocker], turned!)).toBeNull();
   });
 });
