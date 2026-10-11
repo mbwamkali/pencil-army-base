@@ -11,7 +11,8 @@ describe("shot descriptions", () => {
     expect(describeIncoming(miss)).toBe("missed");
 
     const wall = resolveShot([u("wall-1", "wall", 5, 5)], 5.5, 5.5, 1).result;
-    expect(describeShot(wall)).toBe("Wall hit");
+    expect(describeShot(wall)).toBe("Blocked by wall");
+    expect(describeIncoming(wall)).toBe("was blocked by one of your walls");
 
     const fort = resolveShot([u("fort-1", "fort", 5, 5)], 6.5, 6.5, 1).result;
     expect(describeShot(fort)).toBe("Fort damaged");

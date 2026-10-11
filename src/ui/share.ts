@@ -4,6 +4,7 @@ import { coreCount, fightingCount, modeOf } from "../rules/modes.ts";
 import { rectOf, unitState } from "../rules/units.ts";
 import { FOOTPRINT, SHOT_ART_SIZE } from "../rules/constants.ts";
 import { artUrl, unitArt } from "./art.ts";
+import { SHIELD_PATH } from "./board.ts";
 import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
 import { isApp, shareImage } from "./native.ts";
 
@@ -105,6 +106,22 @@ export async function renderBattlefield(game: Game): Promise<HTMLCanvasElement> 
       if (p === 1) ctx.scale(-1, 1);
       if (u.upright) ctx.rotate(-Math.PI / 2);
       ctx.drawImage(img, -side / 2, -side / 2, side, side);
+      ctx.restore();
+    }
+    // The same shields as on screen, above the units: a wall took these shots.
+    for (const s of game.players[enemy].shots) {
+      if (s.outcome !== "wall") continue;
+      const side = 0.8 * sq;
+      ctx.save();
+      ctx.translate(x0 + s.x * sq - side / 2, y0 + s.y * sq - side / 2);
+      ctx.scale(side / 24, side / 24);
+      const shield = new Path2D(SHIELD_PATH);
+      ctx.fillStyle = "#fff";
+      ctx.fill(shield);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = "round";
+      ctx.stroke(shield);
       ctx.restore();
     }
     ctx.strokeStyle = INK;

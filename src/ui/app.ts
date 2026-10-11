@@ -26,7 +26,7 @@ import { AI_NAME } from "../rules/ai.ts";
 import { encodeLayout, pasteLayout, type CodeProblem } from "../rules/code.ts";
 import { randomLayout } from "../rules/layout.ts";
 import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
-import { placementProblem, snapWall, type Candidate } from "../rules/placement.ts";
+import { placementProblem, snapWall, turnWall, type Candidate } from "../rules/placement.ts";
 import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
 import { UNIT_LABEL, unitArt } from "./art.ts";
@@ -36,6 +36,8 @@ import {
   drawMagnifier,
   drawShot,
   drawUnit,
+  shieldIcon,
+  shotMark,
   type Board,
 } from "./board.ts";
 import { el, sv } from "./dom.ts";
@@ -45,6 +47,7 @@ import { SUMMARY_HEADERS, summaryRows } from "./summary.ts";
 import { VERSION } from "./version.ts";
 import { applySettings, setSetting, settings } from "./settings.ts";
 import { clearGame, loadGame, saveGame } from "./store.ts";
+import { WALL_TIP, takeWallTip } from "./hints.ts";
 import { ABOUT, HOW_TO_PLAY, describeIncoming, describeShot } from "./text.ts";
 
 type Screen = "menu" | "howto" | "opponent" | "setup" | "access" | "about" | "game";
@@ -79,6 +82,8 @@ interface Ui {
   placing: UnitType | null;
   /** vs Computer: the "You win!" / "You lose" pop-up is waiting to be closed. */
   resultPopup: boolean;
+  /** This turn's shot was the first one a wall blocked on this device, so the wall tip is showing. */
+  wallTip: boolean;
 }
 
 const MODE_KEY = "pencil-army-base:mode";
@@ -103,6 +108,7 @@ const ui: Ui = {
   pasteError: "",
   placing: null,
   resultPopup: false,
+  wallTip: false,
 };
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
@@ -603,7 +609,14 @@ function buildScreen(game: Game): HTMLElement {
       board.overlay.replaceChildren();
       dragId = null;
       ui.tip = "";
-      if (!fromGrid && !tapPlace && !inGrid && !moved) {
+      const tapped = fromGrid && !moved ? units.find((u) => u.id === id) : undefined;
+      if (tapped?.type === "wall") {
+        // A tap on a placed wall gives it a quarter turn.
+        const turned = turnWall(others, tapped, mode.grid);
+        const r = turned && placeUnit(game, player, id, turned.x, turned.y, turned.upright);
+        if (r && r.ok) return setGame(r.game);
+        ui.tip = tapped.upright ? "No room to lay this wall flat here." : PROBLEM_TIP.upright_not_beside_fort;
+      } else if (!fromGrid && !tapPlace && !inGrid && !moved) {
         // A tap on the tray picks that unit for tap-to-place; tapping it again puts it back.
         ui.placing = ui.placing === type ? null : type;
       } else if (cand && inGrid && valid) {
@@ -746,6 +759,7 @@ function battleScreen(game: Game): HTMLElement {
     ui.turnKey = key;
     ui.aim = null;
     ui.popover = null;
+    ui.wallTip = false;
     stopLook();
     // Straight to the enemy base, after a short look at the last hit on your own base if there was one.
     if (!game.shotFired && theirs.shots.length > 0) {
@@ -776,7 +790,7 @@ function battleScreen(game: Game): HTMLElement {
     for (const u of mine.units) drawUnit(board.units, { ...u, state: unitState(u), mirror: me === 1 }, SQ);
     const incoming = theirs.shots;
     incoming.forEach((s, i) => {
-      drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
+      drawShot(board, shotMark(s), SQ);
       if (i === incoming.length - 1) {
         board.marks.append(sv("circle", { cx: s.x * SQ, cy: s.y * SQ, r: SHOT_RADIUS * SQ, class: "last-shot" }));
       }
@@ -791,10 +805,11 @@ function battleScreen(game: Game): HTMLElement {
     const untouched = view.shots.length === 0;
     board = createBoard({ mode, tint: "target", label: untouched ? `${theirs.name}'s base (hidden)` : undefined, testid: "board" });
     for (const u of view.revealed) drawUnit(board.units, { ...u, state: u.state, mirror: me !== 1 }, SQ);
-    for (const s of view.shots) drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
+    for (const s of view.shots) drawShot(board, shotMark(s), SQ);
     if (justFired) {
       board.marks.append(sv("circle", { cx: justFired.x * SQ, cy: justFired.y * SQ, r: SHOT_RADIUS * SQ, class: "last-shot" }));
-      statusLines.push(el("b", { "data-testid": "result" }, describeShot(justFired)));
+      statusLines.push(el("b", { "data-testid": "result", class: justFired.outcome === "wall" ? "blocked" : undefined }, describeShot(justFired)));
+      if (ui.wallTip) statusLines.push(el("span", { class: "wall-tip", "data-testid": "wall-tip" }, shieldIcon(), WALL_TIP));
     } else {
       statusLines.push(ui.aim ? "Tap Fire, or tap the same spot again." : "Tap the paper to aim.");
     }
@@ -815,6 +830,7 @@ function battleScreen(game: Game): HTMLElement {
     if (!r.ok) return;
     ui.aim = null;
     ui.view = "target";
+    if (r.result.outcome === "wall") ui.wallTip = takeWallTip();
     if (r.result.destroyed.length > 0) navigator.vibrate?.(60);
     setGame(r.game);
   };
@@ -944,7 +960,10 @@ function battleScreen(game: Game): HTMLElement {
 
   const root = layout(board.svg, panel);
   if (justFired && ui.view === "target") {
-    root.append(el("div", { class: "banner", "data-testid": "banner" }, describeShot(justFired)));
+    const blocked = justFired.outcome === "wall";
+    root.append(
+      el("div", { class: `banner${blocked ? " blocked" : ""}`, "data-testid": "banner" }, blocked && shieldIcon("banner-shield"), describeShot(justFired)),
+    );
   }
   if (ui.popover) {
     const left = ui.popover === "you" ? myLeft : foeLeft;
@@ -984,7 +1003,7 @@ function computerTurnScreen(game: Game): HTMLElement {
   const SQ = sqFor(mode);
   const board = createBoard({ mode, tint: "own", testid: "board" });
   for (const u of game.players[human].units) drawUnit(board.units, { ...u, state: unitState(u), mirror: false }, SQ);
-  for (const s of game.players[game.current].shots) drawShot(board.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, SQ);
+  for (const s of game.players[game.current].shots) drawShot(board, shotMark(s), SQ);
 
   if (!computerTimer) {
     computerTimer = window.setTimeout(() => {
@@ -1043,7 +1062,7 @@ function gameOverScreen(game: Game): HTMLElement {
   const side = (p: PlayerIndex) => {
     const b = createBoard({ mode, sq: mini, tint: "own" });
     for (const u of game.players[p].units) drawUnit(b.units, { ...u, state: unitState(u), mirror: p === 1 }, mini);
-    for (const s of game.players[other(p)].shots) drawShot(b.marks, { x: s.x, y: s.y, hit: s.hits.length > 0 }, mini);
+    for (const s of game.players[other(p)].shots) drawShot(b, shotMark(s), mini);
     const units = game.players[p].units;
     const left = mode.win === "score" ? `${unitsLeft(units).total} / ${fightingCount(mode)} left` : `${coreLeft(units)} / ${coreCount(mode)} to destroy`;
     return el(

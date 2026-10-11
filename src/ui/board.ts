@@ -1,5 +1,6 @@
 import { FOOTPRINT, SHOT_ART_SIZE, SHOT_RADIUS, type UnitType } from "../rules/constants.ts";
 import { MODES, type Mode } from "../rules/modes.ts";
+import type { ShotResult } from "../rules/shots.ts";
 import { rectOf, type UnitState } from "../rules/units.ts";
 import { artUrl, unitArt } from "./art.ts";
 import { sv } from "./dom.ts";
@@ -31,6 +32,21 @@ export interface DrawShot {
   x: number;
   y: number;
   hit: boolean;
+  /** A wall took the whole shot: a shield is drawn on the mark. */
+  blocked?: boolean;
+}
+
+/** How to draw a fired shot. */
+export function shotMark(s: Pick<ShotResult, "x" | "y" | "hits" | "outcome">): DrawShot {
+  return { x: s.x, y: s.y, hit: s.hits.length > 0, blocked: s.outcome === "wall" };
+}
+
+/** A shield outline in a 24 x 24 box, for shots a wall blocked. */
+export const SHIELD_PATH = "M12 2L21 5.5V11.5C21 16.5 17.2 20.2 12 22C6.8 20.2 3 16.5 3 11.5V5.5Z";
+
+/** A small shield icon, for text such as the "Blocked by wall" banner. */
+export function shieldIcon(cls = "shield-icon"): SVGSVGElement {
+  return sv("svg", { viewBox: "0 0 24 24", class: cls, "aria-hidden": "true" }, sv("path", { d: SHIELD_PATH }));
 }
 
 let boardCount = 0;
@@ -69,9 +85,25 @@ export function drawShotImage(parent: Element, name: string, x: number, y: numbe
   return img;
 }
 
-export function drawShot(parent: Element, s: DrawShot, sq: number): void {
-  drawShotImage(parent, s.hit ? "shot-hit" : "shot-miss", s.x, s.y, sq);
-  if (settings.clearMarkers) drawClearMarker(parent, s, sq);
+export function drawShot(board: Pick<Board, "marks" | "stamps">, s: DrawShot, sq: number): void {
+  drawShotImage(board.marks, s.hit ? "shot-hit" : "shot-miss", s.x, s.y, sq);
+  // The shield goes above the units, so the crossed-off wall never hides it.
+  if (s.blocked) drawShield(board.stamps, s, sq);
+  else if (settings.clearMarkers) drawClearMarker(board.marks, s, sq);
+}
+
+/** A shield on the smudge, so a shot a wall blocked never reads as a hit on what was under it. */
+function drawShield(parent: Element, s: DrawShot, sq: number): void {
+  const side = 0.8 * sq;
+  const k = side / 24;
+  parent.append(
+    sv("path", {
+      d: SHIELD_PATH,
+      class: "mark-shield",
+      "data-mark": "blocked",
+      transform: `translate(${s.x * sq - side / 2} ${s.y * sq - side / 2}) scale(${k})`,
+    }),
+  );
 }
 
 /** Strong marks on top of the pencil smudge: a dark disc with a white cross for a hit, a white ring for a miss. */
@@ -98,6 +130,8 @@ export interface Board {
   world: SVGGElement;
   units: SVGGElement;
   marks: SVGGElement;
+  /** Shields for wall-blocked shots, drawn above the units. */
+  stamps: SVGGElement;
   /** Aim crosshair, drag ghost and other temporary drawing on top. */
   overlay: SVGGElement;
   sq: number;
@@ -128,6 +162,7 @@ export function createBoard(opts: { mode?: Mode; sq?: number; tint: "own" | "tar
 
   const units = sv("g", { class: "units" });
   const marks = sv("g", { class: "marks" });
+  const stamps = sv("g", { class: "stamps" });
   const world = sv(
     "g",
     { id: worldId },
@@ -135,6 +170,7 @@ export function createBoard(opts: { mode?: Mode; sq?: number; tint: "own" | "tar
     sv("path", { d: lines.join(""), class: "gridlines" }),
     marks,
     units,
+    stamps,
   );
   if (opts.tint === "target") {
     const wobble = Array.from({ length: GRID_H * 2 + 1 }, (_, i) => `L${3 + (i % 2 ? 4 : 0)} ${(i * h) / (GRID_H * 2)}`).join("");
@@ -154,6 +190,7 @@ export function createBoard(opts: { mode?: Mode; sq?: number; tint: "own" | "tar
     world,
     units,
     marks,
+    stamps,
     overlay,
     sq,
     worldId,

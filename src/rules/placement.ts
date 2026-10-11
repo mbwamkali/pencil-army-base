@@ -1,6 +1,6 @@
 import { WALL_SNAP_RANGE } from "./constants.ts";
 import { FULL_GRID, type Grid } from "./modes.ts";
-import { rectOf, rectsOverlap, type Rect, type Unit } from "./units.ts";
+import { rectOf, rectsOverlap, sizeOf, type Rect, type Unit } from "./units.ts";
 
 export type PlacementProblem =
   | "out_of_bounds"
@@ -62,4 +62,57 @@ export function snapWall(fort: Pick<Unit, "x" | "y">, px: number, py: number): C
     x: ox < 0 ? fort.x : fort.x + 1,
     y: oy < 0 ? fort.y - 1 : fort.y + fw,
   };
+}
+
+/**
+ * Where a placed wall goes when tapped to give it a quarter turn, or null if it has nowhere to go.
+ * It turns about its own centre and snaps to the grid. Near the fort it may instead snap into the
+ * nearest free spot along the fort, since an upright wall can only stand beside the fort.
+ */
+export function turnWall(
+  others: readonly Unit[],
+  wall: Pick<Unit, "x" | "y" | "upright">,
+  grid: Grid = FULL_GRID,
+): Candidate | null {
+  const upright = !wall.upright;
+  const from = rectOf({ type: "wall", ...wall });
+  const cx = from.x + from.w / 2;
+  const cy = from.y + from.h / 2;
+  const size = sizeOf("wall", upright);
+  const options: Candidate[] = [];
+  for (const x of new Set([Math.floor(cx - size.w / 2), Math.ceil(cx - size.w / 2)])) {
+    for (const y of new Set([Math.floor(cy - size.h / 2), Math.ceil(cy - size.h / 2)])) {
+      options.push({ type: "wall", upright, x, y });
+    }
+  }
+  const fort = others.find((o) => o.type === "fort");
+  if (fort) {
+    const f = rectOf(fort);
+    const gapX = Math.max(f.x - (from.x + from.w), 0, from.x - (f.x + f.w));
+    const gapY = Math.max(f.y - (from.y + from.h), 0, from.y - (f.y + f.h));
+    if (Math.hypot(gapX, gapY) <= WALL_SNAP_RANGE) {
+      if (upright) {
+        for (const x of [f.x - 1, f.x + f.w]) {
+          for (let y = f.y - 1; y < f.y + f.h; y++) options.push({ type: "wall", upright, x, y });
+        }
+      } else {
+        for (const y of [f.y - 1, f.y + f.h]) {
+          for (let x = f.x - 1; x < f.x + f.w; x++) options.push({ type: "wall", upright, x, y });
+        }
+      }
+    }
+  }
+  // Nearest centre wins; on a tie, the one that keeps its top-left corner nearer, so two taps undo each other.
+  let best: Candidate | null = null;
+  let bestDist = Infinity;
+  for (const c of options) {
+    if (placementProblem(others, c, grid) !== null) continue;
+    const r = rectOf(c);
+    const d = Math.hypot(r.x + r.w / 2 - cx, r.y + r.h / 2 - cy) + Math.hypot(c.x - wall.x, c.y - wall.y) / 1000;
+    if (d < bestDist) {
+      best = c;
+      bestDist = d;
+    }
+  }
+  return best;
 }

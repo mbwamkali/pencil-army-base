@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { gridPoint, savedGame, startNewGame } from "./helpers.ts";
+import { gridPoint, savedGame, startNewGame, tapGrid } from "./helpers.ts";
 
 async function dragFromTray(page: Page, type: string, gx: number, gy: number): Promise<void> {
   const tray = await page.getByTestId(`tray-${type}`).boundingBox();
@@ -45,6 +45,27 @@ test("a wall far from the fort lies flat", async ({ page }) => {
   await dragFromTray(page, "fort", 9.5, 4.5);
   await dragFromTray(page, "wall", 3, 8.5);
   expect((await placed(page)).find((u) => u.type === "wall")).toMatchObject({ upright: false });
+});
+
+test("tapping a placed wall turns it, and tapping again turns it back", async ({ page }) => {
+  await dragFromTray(page, "fort", 9.5, 4.5);
+  await dragFromTray(page, "wall", 7.4, 4.5);
+  const upright = (await placed(page)).find((u) => u.id === "wall-1")!;
+  expect(upright).toMatchObject({ x: 7, upright: true });
+  await tapGrid(page, 7.5, upright.y + 1);
+  const flat = (await placed(page)).find((u) => u.id === "wall-1")!;
+  expect(flat).toMatchObject({ upright: false });
+  await tapGrid(page, flat.x + 1, flat.y + 0.5);
+  expect((await placed(page)).find((u) => u.id === "wall-1")).toEqual(upright);
+});
+
+test("a wall far from the fort won't turn upright, and the player is told why", async ({ page }) => {
+  await dragFromTray(page, "fort", 9.5, 4.5);
+  await dragFromTray(page, "wall", 3, 8.5);
+  const wall = (await placed(page)).find((u) => u.type === "wall")!;
+  await tapGrid(page, wall.x + 1, wall.y + 0.5);
+  expect((await placed(page)).find((u) => u.type === "wall")).toEqual(wall);
+  await expect(page.getByTestId("tip")).toHaveText("Walls only stand upright beside the fort.");
 });
 
 test("units cannot overlap, and the player is told why", async ({ page }) => {

@@ -11,7 +11,7 @@ export function describeShot(r: ShotResult): string {
     case "miss":
       return "Miss";
     case "wall":
-      return "Wall hit";
+      return "Blocked by wall";
     case "damaged":
       return "Fort damaged";
     case "destroyed":
@@ -25,7 +25,7 @@ export function describeIncoming(r: ShotResult): string {
     case "miss":
       return "missed";
     case "wall":
-      return "hit one of your walls";
+      return "was blocked by one of your walls";
     case "damaged":
       return "damaged your fort";
     case "destroyed":
@@ -64,7 +64,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     heading: "Building your base",
     body: [
       "Hold the phone sideways. Your base fills the screen. Drag each unit from the tray onto the grid and it snaps into place. Or tap a unit in the tray, then tap the grid to put it there.",
-      "Drag a wall next to your fort and it snaps against the fort, standing upright on the sides. Use all four to surround your fort.",
+      "Drag a wall next to your fort and it snaps against the fort, standing upright on the sides. Tap a placed wall to turn it. Use all four to surround your fort.",
       "Drag a unit off the grid to remove it. Tap Random layout if you want the game to place everything for you. When every unit is placed, tap Done.",
     ],
   },
@@ -81,7 +81,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     heading: "Hits, misses and walls",
     body: [
       "Your shot is a circle a little bigger than one infantry square. Anything it touches is hit, so one lucky shot can hit more than one unit.",
-      "Miss: a pencil mark stays on the paper so you know that spot is empty. Destroyed: the unit appears with a red cross through it. Fort damaged: your first hit on the fort shows it cracked, and one more hit destroys it. Wall hit: the wall takes the blow and is destroyed. Anything else under that shot is safe and stays hidden.",
+      "Miss: a pencil mark stays on the paper so you know that spot is empty. Destroyed: the unit appears with a red cross through it. Fort damaged: your first hit on the fort shows it cracked, and one more hit destroys it. Blocked by wall: the wall takes the whole shot and is destroyed, and a shield marks the spot. Anything else under that shot is safe and stays hidden, even if the circle touched it.",
       "All your earlier shots stay on the Enemy base view for the rest of the game, so use them to work out where the enemy is hiding.",
     ],
   },
