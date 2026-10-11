@@ -36,7 +36,12 @@ test("a single player game: the computer builds, shoots back, and the human can 
     await expect(page.getByTestId("computer-status")).toBeVisible();
   }
   await page.getByTestId("see-results").click();
-  await expect(page.getByTestId("winner")).toHaveText("Tester wins!");
+  // A big "You win!" card with a smiling face comes first; closing it shows the summary.
+  await expect(page.getByTestId("result-headline")).toHaveText("You win!");
+  await expect(page.getByTestId("face-happy")).toBeVisible();
+  await page.getByTestId("result-close").click();
+  await expect(page.getByTestId("result-popup")).toHaveCount(0);
+  await expect(page.getByTestId("winner")).toHaveText("You win!");
   const over = await savedGame(page);
   // The computer took one shot per turn: never more shots than the human.
   expect(over.players[1]!.shots.length).toBeLessThanOrEqual(over.players[0]!.shots.length);

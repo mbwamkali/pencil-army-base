@@ -75,6 +75,10 @@ interface Ui {
   /** Paste layout: what is typed in the box, and why the last code was refused ("" before trying). */
   pasteText: string;
   pasteError: string;
+  /** Build screen: the unit type picked in the tray for tap-to-place (shown darker), or null. */
+  placing: UnitType | null;
+  /** vs Computer: the "You win!" / "You lose" pop-up is waiting to be closed. */
+  resultPopup: boolean;
 }
 
 const MODE_KEY = "pencil-army-base:mode";
@@ -97,6 +101,8 @@ const ui: Ui = {
   copied: null,
   pasteText: "",
   pasteError: "",
+  placing: null,
+  resultPopup: false,
 };
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
@@ -250,6 +256,8 @@ function resume(game: Game): void {
   ui.screen = "game";
   ui.turnKey = "";
   ui.endShown = false;
+  ui.placing = null;
+  ui.resultPopup = game.ai !== undefined;
   // Single player has nothing to hide from the other side of the table, so no Start screen.
   ui.gate = game.ai !== undefined ? null : game.phase === "build" ? game.building : game.phase === "turn" ? game.current : null;
   render();
@@ -406,6 +414,8 @@ function startGame(): void {
   ui.gate = null;
   ui.view = "mine";
   ui.aim = null;
+  ui.placing = null;
+  ui.resultPopup = ui.vsComputer;
   setGame(createGame({ seed: seedFor(), names: [ui.names[0], ui.names[1]], mode: ui.mode, vsComputer: ui.vsComputer }));
 }
 
@@ -514,6 +524,9 @@ const PROBLEM_TIP: Record<Failure, string> = {
 /** How far above the finger a dragged unit floats, in squares, so the finger does not hide it. */
 const TOUCH_LIFT = 0.8;
 
+/** A press that moves less than this many pixels is a tap, not a drag. */
+const TAP_SLOP = 10;
+
 function buildScreen(game: Game): HTMLElement {
   const player = game.building;
   const units = game.players[player].units;
@@ -521,6 +534,7 @@ function buildScreen(game: Game): HTMLElement {
   const board = createBoard({ mode, tint: "own", testid: "board" });
   const SQ = board.sq;
   let dragId: string | null = null;
+  const slots = armySlots(mode.army);
 
   const drawUnits = () => {
     board.units.replaceChildren();
@@ -537,10 +551,17 @@ function buildScreen(game: Game): HTMLElement {
         return x >= r.x - 0.2 && x <= r.x + r.w + 0.2 && y >= r.y - 0.2 && y <= r.y + r.h + 0.2;
       });
 
-  const startDrag = (e: PointerEvent, id: string, type: UnitType, fromGrid: boolean, capture: Element) => {
+  /** Tap-to-place: the next unplaced unit of the type picked in the tray. */
+  const nextOf = (type: UnitType): string | undefined => slots.find((s) => s.type === type && !units.some((u) => u.id === s.id))?.id;
+  if (ui.placing && !nextOf(ui.placing)) ui.placing = null;
+
+  /** Drags a unit; `tapPlace` means the finger came down on empty paper to place the picked unit, so it is drawn right under the finger. */
+  const startDrag = (e: PointerEvent, id: string, type: UnitType, fromGrid: boolean, capture: Element, tapPlace = false) => {
     e.preventDefault();
     capture.setPointerCapture(e.pointerId);
-    const lift = e.pointerType === "mouse" ? 0 : TOUCH_LIFT;
+    const lift = e.pointerType === "mouse" || tapPlace ? 0 : TOUCH_LIFT;
+    const start = { x: e.clientX, y: e.clientY };
+    let moved = false;
     const others = units.filter((u) => u.id !== id);
     const fort = others.find((u) => u.type === "fort");
     let cand: Candidate | null = null;
@@ -550,6 +571,7 @@ function buildScreen(game: Game): HTMLElement {
     if (fromGrid) drawUnits();
 
     const update = (ev: PointerEvent) => {
+      if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP) moved = true;
       const g = board.toGrid(ev);
       const cx = g.x;
       const cy = g.y - lift;
@@ -581,7 +603,10 @@ function buildScreen(game: Game): HTMLElement {
       board.overlay.replaceChildren();
       dragId = null;
       ui.tip = "";
-      if (cand && inGrid && valid) {
+      if (!fromGrid && !tapPlace && !inGrid && !moved) {
+        // A tap on the tray picks that unit for tap-to-place; tapping it again puts it back.
+        ui.placing = ui.placing === type ? null : type;
+      } else if (cand && inGrid && valid) {
         const r = placeUnit(game, player, id, cand.x, cand.y, cand.upright);
         if (r.ok) return setGame(r.game);
       } else if (cand && inGrid && !valid) {
@@ -608,23 +633,25 @@ function buildScreen(game: Game): HTMLElement {
   board.svg.addEventListener("pointerdown", (e) => {
     const g = board.toGrid(e);
     const u = unitAt(g.x, g.y);
-    if (u) startDrag(e, u.id, u.type, true, board.svg);
+    if (u) return startDrag(e, u.id, u.type, true, board.svg);
+    const id = ui.placing && nextOf(ui.placing);
+    if (ui.placing && id) startDrag(e, id, ui.placing, false, board.svg, true);
   });
 
-  const slots = armySlots(mode.army);
   const placedCount = (t: UnitType) => units.filter((u) => u.type === t).length;
   const tray = el(
     "div",
     { class: "tray" },
     UNIT_TYPES.map((type) => {
       const left = mode.army[type] - placedCount(type);
-      const nextId = slots.find((s) => s.type === type && !units.some((u) => u.id === s.id))?.id;
+      const nextId = nextOf(type);
       return el(
         "div",
         {
-          class: `tray-item${left === 0 ? " empty" : ""}`,
+          class: `tray-item${left === 0 ? " empty" : ""}${ui.placing === type ? " selected" : ""}`,
           "data-testid": `tray-${type}`,
           "data-left": left,
+          "aria-pressed": ui.placing === type ? "true" : "false",
           onpointerdown: (e: PointerEvent) => {
             if (nextId) startDrag(e, nextId, type, false, e.currentTarget as Element);
           },
@@ -639,6 +666,8 @@ function buildScreen(game: Game): HTMLElement {
   // One line under the name: a placement problem if there is one, otherwise how many units are left to place.
   const sub = ui.tip
     ? el("div", { class: "panel-sub tip", "data-testid": "tip" }, ui.tip)
+    : ui.placing
+    ? el("div", { class: "panel-sub", "data-testid": "placing" }, `Tap the map to place: ${UNIT_LABEL[ui.placing]}`)
     : el("div", { class: "panel-sub" }, complete ? "Build your base" : `Place ${slots.length - units.length} more`);
   const panel = el(
     "div",
@@ -669,6 +698,7 @@ function buildScreen(game: Game): HTMLElement {
         "data-testid": "done",
         disabled: !complete,
         onclick: () => {
+          ui.placing = null;
           const r = finishBuild(game, player);
           if (r.ok) setGame(r.game);
         },
@@ -687,18 +717,49 @@ const rectArea = (u: Unit): number => {
 // ---------------------------------------------------------------------------
 // Battle screen
 
+/** Each turn opens on your own base for this long to show the last hit, then moves to the enemy base. */
+const LAST_HIT_LOOK_MS = 1500;
+let lookTimer = 0;
+
+/** Two taps this close together (time and pixels) on the enemy base fire the shot. */
+const DOUBLE_TAP_MS = 350;
+const DOUBLE_TAP_PX = 30;
+
+function stopLook(): void {
+  window.clearTimeout(lookTimer);
+  lookTimer = 0;
+}
+
+function showView(view: "mine" | "target"): void {
+  stopLook();
+  ui.view = view;
+  render();
+}
+
 function battleScreen(game: Game): HTMLElement {
   const me = game.current;
   const foe = other(me);
   const key = `${game.turn}`;
-  if (ui.turnKey !== key) {
-    ui.turnKey = key;
-    ui.view = "mine";
-    ui.aim = null;
-    ui.popover = null;
-  }
   const mine = game.players[me];
   const theirs = game.players[foe];
+  if (ui.turnKey !== key) {
+    ui.turnKey = key;
+    ui.aim = null;
+    ui.popover = null;
+    stopLook();
+    // Straight to the enemy base, after a short look at the last hit on your own base if there was one.
+    if (!game.shotFired && theirs.shots.length > 0) {
+      ui.view = "mine";
+      lookTimer = window.setTimeout(() => {
+        lookTimer = 0;
+        if (ui.game !== game || ui.screen !== "game" || ui.turnKey !== key || ui.view !== "mine" || ui.menu !== "closed") return;
+        ui.view = "target";
+        render();
+      }, LAST_HIT_LOOK_MS);
+    } else {
+      ui.view = game.shotFired ? "mine" : "target";
+    }
+  }
   const lastShot = mine.shots.at(-1);
   const justFired = game.shotFired ? lastShot : undefined;
   const over = game.phase === "over";
@@ -724,7 +785,7 @@ function battleScreen(game: Game): HTMLElement {
     statusLines.push(
       last && !game.shotFired ? `Their last shot ${describeIncoming(last)}.` : last ? "Viewing your base." : "No shots fired at you yet.",
     );
-    if (!game.shotFired) statusLines.push("Switch to Enemy base to fire.");
+    if (!game.shotFired) statusLines.push(lookTimer ? "Moving to the enemy base…" : "Switch to Enemy base to fire.");
   } else {
     const view = targetView(game, me);
     const untouched = view.shots.length === 0;
@@ -735,7 +796,7 @@ function battleScreen(game: Game): HTMLElement {
       board.marks.append(sv("circle", { cx: justFired.x * SQ, cy: justFired.y * SQ, r: 0.95 * SQ, class: "last-shot" }));
       statusLines.push(el("b", { "data-testid": "result" }, describeShot(justFired)));
     } else {
-      statusLines.push(ui.aim ? "Tap Fire when ready." : "Tap the paper to aim.");
+      statusLines.push(ui.aim ? "Tap Fire, or tap the same spot again." : "Tap the paper to aim.");
     }
   }
 
@@ -748,8 +809,20 @@ function battleScreen(game: Game): HTMLElement {
     if (fireButton) fireButton.disabled = false;
   };
 
+  const fireAtAim = () => {
+    if (!ui.aim) return;
+    const r = fire(game, ui.aim.x, ui.aim.y);
+    if (!r.ok) return;
+    ui.aim = null;
+    ui.view = "target";
+    if (r.result.destroyed.length > 0) navigator.vibrate?.(60);
+    setGame(r.game);
+  };
+
   if (ui.view === "target" && !game.shotFired) {
     let aiming = false;
+    let lastTap: { t: number; x: number; y: number } | null = null;
+    let downAt = { x: 0, y: 0 };
     const setAim = (e: PointerEvent) => {
       const g = board.toGrid(e);
       ui.aim = { x: Math.max(0, Math.min(mode.grid.w, g.x)), y: Math.max(0, Math.min(mode.grid.h, g.y)) };
@@ -757,12 +830,23 @@ function battleScreen(game: Game): HTMLElement {
     };
     board.svg.addEventListener("pointerdown", (e) => {
       e.preventDefault();
+      // A second tap on the same spot fires at the aim already set.
+      if (ui.aim && lastTap && e.timeStamp - lastTap.t < DOUBLE_TAP_MS && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_PX) {
+        lastTap = null;
+        return fireAtAim();
+      }
       board.svg.setPointerCapture(e.pointerId);
       aiming = true;
+      downAt = { x: e.clientX, y: e.clientY };
       setAim(e);
     });
     board.svg.addEventListener("pointermove", (e) => aiming && setAim(e));
-    board.svg.addEventListener("pointerup", () => (aiming = false));
+    board.svg.addEventListener("pointerup", (e) => {
+      if (!aiming) return;
+      aiming = false;
+      // Only a tap counts toward a double tap, not the end of a slide to fine-tune the aim.
+      lastTap = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) <= TAP_SLOP ? { t: e.timeStamp, x: e.clientX, y: e.clientY } : null;
+    });
     board.svg.addEventListener("pointercancel", () => (aiming = false));
     drawAim();
   }
@@ -774,12 +858,12 @@ function battleScreen(game: Game): HTMLElement {
     { class: "toggle", role: "group", "aria-label": "View" },
     el(
       "button",
-      { class: `toggle-btn${ui.view === "mine" ? " on" : ""}`, "data-testid": "view-mine", onclick: () => ((ui.view = "mine"), render()) },
+      { class: `toggle-btn${ui.view === "mine" ? " on" : ""}`, "data-testid": "view-mine", onclick: () => showView("mine") },
       "My base",
     ),
     el(
       "button",
-      { class: `toggle-btn${ui.view === "target" ? " on" : ""}`, "data-testid": "view-target", onclick: () => ((ui.view = "target"), render()) },
+      { class: `toggle-btn${ui.view === "target" ? " on" : ""}`, "data-testid": "view-target", onclick: () => showView("target") },
       "Enemy base",
     ),
   );
@@ -818,15 +902,7 @@ function battleScreen(game: Game): HTMLElement {
         class: "btn danger",
         "data-testid": "fire",
         disabled: !ui.aim,
-        onclick: () => {
-          if (!ui.aim) return;
-          const r = fire(game, ui.aim.x, ui.aim.y);
-          if (!r.ok) return;
-          ui.aim = null;
-          ui.view = "target";
-          if (r.result.destroyed.length > 0) navigator.vibrate?.(60);
-          setGame(r.game);
-        },
+        onclick: fireAtAim,
       },
       "Fire",
     );
@@ -943,8 +1019,26 @@ function computerTurnScreen(game: Game): HTMLElement {
 // ---------------------------------------------------------------------------
 // Game over
 
+/** A pencil-drawn face: smiling for a win, sad for a loss, flat for a tie. */
+function faceIcon(mood: "happy" | "sad" | "flat"): SVGElement {
+  const mouth = mood === "happy" ? "M30 60Q48 76 66 60" : mood === "sad" ? "M30 70Q48 54 66 70" : "M32 64H64";
+  const line = { fill: "none", stroke: "currentColor", "stroke-width": 4, "stroke-linecap": "round" };
+  return sv(
+    "svg",
+    { viewBox: "0 0 96 96", class: "result-face", "data-testid": `face-${mood}`, "aria-hidden": "true" },
+    sv("circle", { cx: 48, cy: 48, r: 42, ...line }),
+    sv("circle", { cx: 34, cy: 38, r: 4.5, fill: "currentColor" }),
+    sv("circle", { cx: 62, cy: 38, r: 4.5, fill: "currentColor" }),
+    sv("path", { d: mouth, ...line }),
+  );
+}
+
 function gameOverScreen(game: Game): HTMLElement {
   const mode = modeOf(game.mode);
+  const vsComputer = game.ai !== undefined;
+  const human = vsComputer ? other(game.ai as PlayerIndex) : null;
+  const headline =
+    game.winner === null ? "It's a tie!" : human === null ? `${game.players[game.winner].name} wins!` : game.winner === human ? "You win!" : "You lose";
   const mini = (17 * 20) / mode.grid.w;
   const side = (p: PlayerIndex) => {
     const b = createBoard({ mode, sq: mini, tint: "own" });
@@ -974,7 +1068,7 @@ function gameOverScreen(game: Game): HTMLElement {
     el(
       "h2",
       { class: "winner", "data-testid": "winner" },
-      game.winner === null ? "It's a tie!" : `${game.players[game.winner].name} wins!`,
+      headline,
     ),
     el("div", { class: "minis" }, side(0), side(1)),
     summary,
@@ -1011,6 +1105,26 @@ function gameOverScreen(game: Game): HTMLElement {
         },
         "Main menu",
       ),
+    ),
+    vsComputer && ui.resultPopup && resultPopup(headline, game.winner === null ? "flat" : game.winner === human ? "happy" : "sad"),
+  );
+}
+
+/** vs Computer: a big win or lose card first; closing it shows the summary underneath. */
+function resultPopup(headline: string, mood: "happy" | "sad" | "flat"): HTMLElement {
+  const close = () => {
+    ui.resultPopup = false;
+    render();
+  };
+  return el(
+    "div",
+    { class: "menu-overlay", "data-testid": "result-popup", onclick: close },
+    el(
+      "div",
+      { class: "menu-card result-card" },
+      el("h3", { "data-testid": "result-headline" }, headline),
+      faceIcon(mood),
+      el("button", { class: "btn primary", "data-testid": "result-close", onclick: close }, "See summary"),
     ),
   );
 }

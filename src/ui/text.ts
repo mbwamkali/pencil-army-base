@@ -63,7 +63,7 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Building your base",
     body: [
-      "Hold the phone sideways. Your base fills the screen. Drag each unit from the tray onto the grid and it snaps into place.",
+      "Hold the phone sideways. Your base fills the screen. Drag each unit from the tray onto the grid and it snaps into place. Or tap a unit in the tray, then tap the grid to put it there.",
       "Drag a wall next to your fort and it snaps against the fort, standing upright on the sides. Use all four to surround your fort.",
       "Drag a unit off the grid to remove it. Tap Random layout if you want the game to place everything for you. When every unit is placed, tap Done.",
     ],
@@ -72,8 +72,8 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     heading: "Taking your turn",
     body: [
       "Tap Start on the black screen. You'll see your own base, with your opponent's last shot marked.",
-      "Flip the switch to Enemy base to see your opponent's base. It looks like blank paper, apart from the results of your earlier shots.",
-      "Tap where you want to aim. A magnifier ring with a crosshair appears on the spot, and you can drag to adjust. Then tap Fire. You get one shot per turn.",
+      "Each turn starts with a quick look at where the last enemy shot hit your base, then moves to the Enemy base. It looks like blank paper, apart from the results of your earlier shots.",
+      "Tap where you want to aim. A magnifier ring with a crosshair appears on the spot, and you can drag to adjust. Then tap Fire, or tap the same spot again quickly. You get one shot per turn.",
       "See the result straight away. Flip back to My base if you want to look again. Tap End turn and pass the phone.",
     ],
   },
