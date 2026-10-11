@@ -124,7 +124,7 @@ test("the counters show what is left to destroy, with infantry beneath, and drop
   await tapGrid(page, c.x, c.y);
   await page.getByTestId("fire").click();
   const result = await page.getByTestId("result").innerText();
-  expect(result).toMatch(/Destroyed: Tank|Wall hit/);
+  expect(result).toMatch(/Destroyed: Tank|Blocked by wall/);
   // One shot can catch several units, so count what the rules say is dead.
   const after = await savedGame(page);
   const units = after.players[foe]!.units;
@@ -135,6 +135,37 @@ test("the counters show what is left to destroy, with infantry beneath, and drop
   await expect(page.getByTestId("infantry-enemy")).toHaveText(`+ ${infantry} infantry`);
   await page.getByTestId("counter-enemy").click();
   await expect(page.getByTestId("breakdown")).toContainText("Walls left");
+});
+
+test("a shot a wall blocks says so with a shield, and the wall tip shows only the first time", async ({ page }) => {
+  await startNewGame(page, 7);
+  await buildBothAndStart(page);
+  for (let turn = 0; turn < 2; turn++) {
+    const g = await savedGame(page);
+    const foe = g.current === 0 ? 1 : 0;
+    const wall = g.players[foe]!.units.find((u) => u.type === "wall" && u.hits === 0)!;
+    await page.getByTestId("view-target").click();
+    const c = centreOfUnit(wall);
+    await tapGrid(page, c.x, c.y);
+    await page.getByTestId("fire").click();
+    await expect(page.getByTestId("banner")).toContainText("Blocked by wall");
+    await expect(page.getByTestId("banner").locator("svg")).toHaveCount(1);
+    await expect(page.locator("[data-mark=blocked]")).toHaveCount(1);
+    await expect(page.getByTestId("wall-tip")).toHaveCount(turn === 0 ? 1 : 0);
+    await page.getByTestId("end-turn").click();
+    await page.getByTestId("start").click();
+  }
+  // A new game on the same phone never shows the tip again.
+  await startNewGame(page, 8);
+  await buildBothAndStart(page);
+  const g = await savedGame(page);
+  const wall = g.players[g.current === 0 ? 1 : 0]!.units.find((u) => u.type === "wall")!;
+  await page.getByTestId("view-target").click();
+  const c = centreOfUnit(wall);
+  await tapGrid(page, c.x, c.y);
+  await page.getByTestId("fire").click();
+  await expect(page.getByTestId("result")).toHaveText("Blocked by wall");
+  await expect(page.getByTestId("wall-tip")).toHaveCount(0);
 });
 
 test("a game in progress survives a refresh and covers the base until the player taps Start", async ({ page }) => {
