@@ -29,10 +29,15 @@ function ok<T extends { ok: boolean }>(r: T): Extract<T, { ok: true }> {
 }
 
 describe("a new game", () => {
-  it("is the same for the same seed and can differ between seeds", () => {
+  it("is the same for the same seed", () => {
     expect(createGame({ seed: 7 })).toEqual(createGame({ seed: 7 }));
-    const firsts = new Set(Array.from({ length: 20 }, (_, s) => createGame({ seed: s }).firstShooter));
-    expect(firsts).toEqual(new Set([0, 1]));
+  });
+
+  it("always lets player 1 shoot first, including against the computer", () => {
+    for (let seed = 0; seed < 50; seed++) {
+      expect(createGame({ seed }).firstShooter).toBe(0);
+      expect(createGame({ seed, vsComputer: true }).firstShooter).toBe(0);
+    }
   });
 
   it("gives each player a different default pencil-themed name", () => {

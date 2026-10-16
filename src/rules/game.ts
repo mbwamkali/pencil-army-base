@@ -67,7 +67,10 @@ export function createGame(opts: { seed: number; names?: [string?, string?]; mod
   const rng = new Rng(opts.seed);
   const [a, b] = rng.shuffle(DEFAULT_NAMES);
   const ai = opts.vsComputer ? { ai: 1 as PlayerIndex } : {};
-  const firstShooter: PlayerIndex = rng.next() < 0.5 ? 0 : 1;
+  // Player 1 always shoots first. The draw that used to pick a random first shooter stays, so every
+  // later random choice for this seed (computer bases, computer shots) is unchanged.
+  rng.next();
+  const firstShooter: PlayerIndex = 0;
   const custom = (n?: string) => (n && n.trim() ? n.trim() : undefined);
   return {
     version: 1,

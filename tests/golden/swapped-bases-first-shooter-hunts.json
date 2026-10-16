@@ -5,95 +5,6 @@
    [
     {
      "id": "fort-1",
-     "x": 3,
-     "y": 5
-    },
-    {
-     "id": "wall-1",
-     "x": 2,
-     "y": 6,
-     "upright": true
-    },
-    {
-     "id": "wall-2",
-     "x": 6,
-     "y": 5,
-     "upright": true
-    },
-    {
-     "id": "wall-3",
-     "x": 4,
-     "y": 4
-    },
-    {
-     "id": "wall-4",
-     "x": 14,
-     "y": 9
-    },
-    {
-     "id": "tank-1",
-     "x": 10,
-     "y": 0
-    },
-    {
-     "id": "tank-2",
-     "x": 17,
-     "y": 2
-    },
-    {
-     "id": "tank-3",
-     "x": 9,
-     "y": 6
-    },
-    {
-     "id": "artillery-1",
-     "x": 0,
-     "y": 0
-    },
-    {
-     "id": "artillery-2",
-     "x": 13,
-     "y": 3
-    },
-    {
-     "id": "artillery-3",
-     "x": 17,
-     "y": 7
-    },
-    {
-     "id": "infantry-1",
-     "x": 6,
-     "y": 1
-    },
-    {
-     "id": "infantry-2",
-     "x": 8,
-     "y": 9
-    },
-    {
-     "id": "infantry-3",
-     "x": 12,
-     "y": 6
-    },
-    {
-     "id": "infantry-4",
-     "x": 19,
-     "y": 0
-    },
-    {
-     "id": "infantry-5",
-     "x": 15,
-     "y": 5
-    },
-    {
-     "id": "infantry-6",
-     "x": 11,
-     "y": 8
-    }
-   ],
-   [
-    {
-     "id": "fort-1",
      "x": 8,
      "y": 3
     },
@@ -179,6 +90,95 @@
      "x": 0,
      "y": 9
     }
+   ],
+   [
+    {
+     "id": "fort-1",
+     "x": 3,
+     "y": 5
+    },
+    {
+     "id": "wall-1",
+     "x": 2,
+     "y": 6,
+     "upright": true
+    },
+    {
+     "id": "wall-2",
+     "x": 6,
+     "y": 5,
+     "upright": true
+    },
+    {
+     "id": "wall-3",
+     "x": 4,
+     "y": 4
+    },
+    {
+     "id": "wall-4",
+     "x": 14,
+     "y": 9
+    },
+    {
+     "id": "tank-1",
+     "x": 10,
+     "y": 0
+    },
+    {
+     "id": "tank-2",
+     "x": 17,
+     "y": 2
+    },
+    {
+     "id": "tank-3",
+     "x": 9,
+     "y": 6
+    },
+    {
+     "id": "artillery-1",
+     "x": 0,
+     "y": 0
+    },
+    {
+     "id": "artillery-2",
+     "x": 13,
+     "y": 3
+    },
+    {
+     "id": "artillery-3",
+     "x": 17,
+     "y": 7
+    },
+    {
+     "id": "infantry-1",
+     "x": 6,
+     "y": 1
+    },
+    {
+     "id": "infantry-2",
+     "x": 8,
+     "y": 9
+    },
+    {
+     "id": "infantry-3",
+     "x": 12,
+     "y": 6
+    },
+    {
+     "id": "infantry-4",
+     "x": 19,
+     "y": 0
+    },
+    {
+     "id": "infantry-5",
+     "x": 15,
+     "y": 5
+    },
+    {
+     "id": "infantry-6",
+     "x": 11,
+     "y": 8
+    }
    ]
   ],
   "shots": [
@@ -253,8 +253,8 @@
   ]
  },
  "expected": {
-  "firstShooter": 1,
-  "winner": 1,
+  "firstShooter": 0,
+  "winner": 0,
   "turns": 17,
   "shots": 17,
   "outcomes": [

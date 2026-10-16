@@ -69,9 +69,10 @@ function build(plan: Plan): GameRecord {
 
 const plans: Plan[] = [
   { name: "first-shooter-sweeps-b", seed: 11, layouts: [LAYOUT_A, LAYOUT_B], decoy: [{ x: 5.5, y: 5.5 }, { x: 12.5, y: 9.5 }, { x: 1.5, y: 5.5 }], huntFirst: true },
-  { name: "second-shooter-sweeps-a", seed: 12, layouts: [LAYOUT_A, LAYOUT_B], decoy: [{ x: 4.5, y: 9.5 }, { x: 7.5, y: 7.5 }], huntFirst: false },
-  // Layouts swapped, so the other player's base is the one being hunted.
-  { name: "swapped-bases-first-shooter-hunts", seed: 13, layouts: [LAYOUT_B, LAYOUT_A], decoy: [{ x: 5.5, y: 5.5 }], huntFirst: true, wallOpening: true },
+  // Player 1 always shoots first, so the second shooter (player 2) holds LAYOUT_A and hunts LAYOUT_B.
+  { name: "second-shooter-sweeps-a", seed: 12, layouts: [LAYOUT_B, LAYOUT_A], decoy: [{ x: 4.5, y: 9.5 }, { x: 7.5, y: 7.5 }], huntFirst: false },
+  // The first shooter hunts from LAYOUT_A again, this time opening on the wall beside the fort.
+  { name: "swapped-bases-first-shooter-hunts", seed: 13, layouts: [LAYOUT_A, LAYOUT_B], decoy: [{ x: 5.5, y: 5.5 }], huntFirst: true, wallOpening: true },
 ];
 
 mkdirSync("tests/golden", { recursive: true });
