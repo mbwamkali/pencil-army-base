@@ -57,6 +57,23 @@ export function centreOfUnit(u: { type: string; x: number; y: number; upright: b
   return { x: u.x + rw / 2, y: u.y + rh / 2 };
 }
 
+/** The centre of a square with nothing on it or on any square around it, so a shot there is a miss. */
+export function emptySpot(units: { type: string; x: number; y: number; upright: boolean }[], grid: GridSize = FULL): { x: number; y: number } {
+  const taken = new Set<string>();
+  for (const u of units) {
+    const [w, h] = SIZE[u.type] as [number, number];
+    const [rw, rh] = u.type === "wall" && u.upright ? [h, w] : [w, h];
+    for (let dx = 0; dx < rw; dx++) for (let dy = 0; dy < rh; dy++) taken.add(`${u.x + dx},${u.y + dy}`);
+  }
+  for (let y = 0; y < grid.h; y++)
+    for (let x = 0; x < grid.w; x++) {
+      let clear = true;
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (taken.has(`${x + dx},${y + dy}`)) clear = false;
+      if (clear) return { x: x + 0.5, y: y + 0.5 };
+    }
+  throw new Error("no empty spot on this base");
+}
+
 export const CORE = ["fort", "tank", "artillery"];
 
 /** The first player keeps shooting at a fort, tank or artillery; the other fires into an empty corner. */

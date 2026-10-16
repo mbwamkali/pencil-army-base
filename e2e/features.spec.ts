@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { buildBothAndStart, huntCore, savedGame, startNewGame, tapGrid, type ModeName } from "./helpers.ts";
+import { buildBothAndStart, emptySpot, huntCore, savedGame, startNewGame, tapGrid, type ModeName } from "./helpers.ts";
 
 const panelOverflow = (page: Page) =>
   page.evaluate(() => {
@@ -35,8 +35,10 @@ test("Player 1's army is drawn as it is and Player 2's is mirrored", async ({ pa
 test("clear markers add a cross for a hit and a ring for a miss, and are off by default", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);
+  const g = await savedGame(page);
+  const miss = emptySpot(g.players[g.current === 0 ? 1 : 0]!.units);
   await page.getByTestId("view-target").click();
-  await tapGrid(page, 0.6, 0.6);
+  await tapGrid(page, miss.x, miss.y);
   await page.getByTestId("fire").click();
   await expect(page.locator(".mark-hit, .mark-miss")).toHaveCount(0);
 
