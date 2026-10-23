@@ -1,7 +1,20 @@
 import type { Game, PlayerIndex } from "../../rules/game.ts";
-import { decodeExplored, seenNow, unitSeen, visibleSquares } from "./fog.ts";
+import type { Unit } from "../../rules/units.ts";
+import { HP, hpLeft, stateOf } from "./constants.ts";
+import { decodeExplored, unitSeen, visibleSquares } from "./fog.ts";
 import { mapOf } from "./maps.ts";
-import type { StrategicView } from "./types.ts";
+import type { DrawnUnit, SeenUnit, StrategicView } from "./types.ts";
+
+/** A unit as the screens draw it. */
+export function drawnUnit(u: Unit, owner: PlayerIndex): DrawnUnit {
+  return { id: u.id, type: u.type, x: u.x, y: u.y, upright: u.upright, state: stateOf(u), hp: hpLeft(u), maxHp: HP[u.type], owner, current: true };
+}
+
+/** A last sighting as the screens draw it: faded, where it was when seen. */
+export function drawnSighting(s: SeenUnit, owner: PlayerIndex): DrawnUnit {
+  const hp = s.hp ?? (s.state === "destroyed" ? 0 : HP[s.type]);
+  return { id: s.id, type: s.type, x: s.x, y: s.y, upright: s.upright, state: s.state, hp, maxHp: HP[s.type], owner, current: false, seenTurn: s.turn };
+}
 
 /**
  * The viewer's own turn count. Game.turn counts both players' turns; player 1 always goes first,
@@ -31,23 +44,31 @@ export function strategicView(game: Game, viewer: PlayerIndex): StrategicView {
   const explored = decodeExplored(s.explored[viewer], map);
   for (const i of visible) explored.add(i);
   const lastSeen = s.lastSeen[viewer];
-  const enemies: StrategicView["enemies"] = [];
-  for (const u of game.players[viewer === 0 ? 1 : 0].units) {
-    if (unitSeen(u, visible, map)) enemies.push({ unit: seenNow(u, game.turn), current: true });
+  const enemy: PlayerIndex = viewer === 0 ? 1 : 0;
+  const enemies: DrawnUnit[] = [];
+  for (const u of game.players[enemy].units) {
+    if (unitSeen(u, visible, map)) enemies.push(drawnUnit(u, enemy));
     else {
       const old = lastSeen.find((seen) => seen.id === u.id);
-      if (old) enemies.push({ unit: old, current: false });
+      if (old) enemies.push(drawnSighting(old, enemy));
     }
   }
   return {
     map,
     viewer,
     base: s.bases[viewer],
-    units,
+    enemyBase: null,
+    units: units.map((u) => drawnUnit(u, viewer)),
+    enemies,
     explored,
     visible,
-    enemies,
+    shots: [],
+    lastShot: null,
+    orders: [],
+    report: [],
     exploredPercent: exploredPercent(explored, map),
     turnNumber: turnNumber(game, viewer),
+    over: game.phase === "over",
+    winner: game.winner,
   };
 }

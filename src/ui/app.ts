@@ -666,7 +666,7 @@ function buildScreen(game: Game): HTMLElement {
   const tray = el(
     "div",
     { class: "tray" },
-    UNIT_TYPES.map((type) => {
+    UNIT_TYPES.filter((type) => mode.army[type] > 0).map((type) => {
       const left = mode.army[type] - placedCount(type);
       const nextId = nextOf(type);
       return el(

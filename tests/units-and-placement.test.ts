@@ -29,7 +29,7 @@ const unit = (id: string, type: Unit["type"], x: number, y: number, upright = fa
 describe("the army", () => {
   it("is 17 units: 1 fort, 3 tanks, 3 artillery, 6 infantry, 4 walls", () => {
     expect(ARMY_SLOTS).toHaveLength(17);
-    expect(ARMY).toEqual({ fort: 1, tank: 3, artillery: 3, infantry: 6, wall: 4 });
+    expect(ARMY).toEqual({ fort: 1, tank: 3, artillery: 3, infantry: 6, wall: 4, truck: 0 });
   });
 
   it("covers 47 of the 200 squares", () => {

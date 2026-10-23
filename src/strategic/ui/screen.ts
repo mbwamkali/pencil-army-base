@@ -53,7 +53,7 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
   wholeButton.addEventListener("click", () => (mapView.isWhole() ? mapView.focusBase() : mapView.fitWhole()));
 
   // "Spotted" the moment any enemy fort has been seen, now or earlier; it is the thing to find.
-  const fortSeen = view.enemies.some((e) => e.unit.type === "fort");
+  const fortSeen = view.enemies.some((e) => e.type === "fort");
   const status = el(
     "div",
     { class: "status strategic-status" },

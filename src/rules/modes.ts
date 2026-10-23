@@ -38,7 +38,7 @@ export const MODES: Record<ModeId, Mode> = {
     id: "skirmish",
     name: "Skirmish",
     blurb: "Small army on a small board. Destroy the fort, tank and artillery.",
-    army: { fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2 },
+    army: { fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2, truck: 0 },
     grid: { w: 12, h: 6 },
     win: "core",
   },
@@ -59,12 +59,12 @@ export const MODES: Record<ModeId, Mode> = {
     win: "score",
     shotsEach: 20,
   },
-  // A Skirmish-size base with one extra tank; the base is dropped onto a big map once both are built.
+  // A Skirmish-size base with one extra tank and a troop truck; the base is dropped onto a big map once both are built.
   strategic: {
     id: "strategic",
     name: "Strategic (test)",
     blurb: "Test build. A big paper map hidden by fog of war: explore to find the enemy base. Two players on one phone.",
-    army: { fort: 1, tank: 2, artillery: 1, infantry: 2, wall: 2 },
+    army: { fort: 1, tank: 2, artillery: 1, infantry: 2, wall: 2, truck: 1 },
     grid: { w: 12, h: 6 },
     win: "core",
   },
@@ -74,7 +74,7 @@ export const MODES: Record<ModeId, Mode> = {
 export const isStrategic = (mode: Pick<Mode, "id">): boolean => mode.id === "strategic";
 
 /** Points for each hit on a unit. Walls score nothing; a fort scores on both of its hits. */
-export const POINTS: Record<UnitType, number> = { infantry: 1, tank: 3, artillery: 3, fort: 5, wall: 0 };
+export const POINTS: Record<UnitType, number> = { infantry: 1, tank: 3, artillery: 3, fort: 5, wall: 0, truck: 2 };
 
 /** Games saved before modes existed were all Battle. */
 export function modeOf(id: ModeId | undefined): Mode {

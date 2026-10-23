@@ -15,7 +15,8 @@ export const SHOT_ART_SIZE = 1.8;
 /** A dropped wall snaps to the fort when its drop point is within this many squares of the fort. */
 export const WALL_SNAP_RANGE = 2;
 
-export const UNIT_TYPES = ["fort", "tank", "artillery", "infantry", "wall"] as const;
+/** Order matters: layout codes list units in this order, so new types go at the end. Trucks only exist in Strategic. */
+export const UNIT_TYPES = ["fort", "tank", "artillery", "infantry", "wall", "truck"] as const;
 export type UnitType = (typeof UNIT_TYPES)[number];
 
 /** Units each player gets. 17 in total, 13 of them fighting units (everything but walls). */
@@ -25,6 +26,7 @@ export const ARMY: Record<UnitType, number> = {
   artillery: 3,
   infantry: 6,
   wall: 4,
+  truck: 0,
 };
 
 /** Footprint in grid squares when laid in the default direction. Walls can also stand upright (1 x 2). */
@@ -34,6 +36,7 @@ export const FOOTPRINT: Record<UnitType, { w: number; h: number }> = {
   artillery: { w: 2, h: 2 },
   infantry: { w: 1, h: 1 },
   wall: { w: 2, h: 1 },
+  truck: { w: 2, h: 2 },
 };
 
 /**
@@ -47,6 +50,7 @@ export const HIT_INSET: Record<UnitType, { side: number; top: number; bottom: nu
   artillery: { side: 0.1, top: 0.35, bottom: 0.25 },
   infantry: { side: 0.15, top: 0.1, bottom: 0.05 },
   wall: { side: 0, top: 0, bottom: 0 },
+  truck: { side: 0.05, top: 0.45, bottom: 0.3 },
 };
 
 /** Hits needed to destroy a unit. */
@@ -56,6 +60,7 @@ export const HITS_TO_DESTROY: Record<UnitType, number> = {
   artillery: 1,
   infantry: 1,
   wall: 1,
+  truck: 1,
 };
 
 /** Made-up pencil-themed officers used as default player names. */

@@ -1,4 +1,3 @@
-import { unitState } from "../../rules/units.ts";
 import { drawUnit } from "../../ui/board.ts";
 import { el, sv } from "../../ui/dom.ts";
 import type { Point, StrategicMap, StrategicView } from "../rules/types.ts";
@@ -415,11 +414,11 @@ function baseGroup(base: Point, S: number): SVGGElement {
 /** Own units at full strength of ink; enemy sightings fade when they are no longer in sight. */
 function unitsGroup(view: StrategicView, S: number): SVGGElement {
   const own = sv("g", { class: "strategic-units" });
-  for (const u of view.units) drawUnit(own, { ...u, state: unitState(u), mirror: view.viewer === 1 }, S);
+  for (const u of view.units) drawUnit(own, { ...u, mirror: view.viewer === 1 }, S);
   const enemies = sv("g", { class: "strategic-enemies" });
-  for (const { unit, current } of view.enemies) {
-    const g = drawUnit(enemies, { ...unit, mirror: view.viewer !== 1 }, S, { opacity: current ? 1 : 0.45 });
-    g.setAttribute("data-seen", current ? "current" : "last");
+  for (const unit of view.enemies) {
+    const g = drawUnit(enemies, { ...unit, mirror: view.viewer !== 1 }, S, { opacity: unit.current ? 1 : 0.45 });
+    g.setAttribute("data-seen", unit.current ? "current" : "last");
   }
   return sv("g", { class: "strategic-armies" }, own, enemies);
 }

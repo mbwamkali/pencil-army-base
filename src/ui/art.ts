@@ -17,4 +17,5 @@ export const UNIT_LABEL: Record<UnitType, string> = {
   artillery: "Artillery",
   infantry: "Infantry",
   wall: "Wall",
+  truck: "Truck",
 };

@@ -1,6 +1,6 @@
 import type { Game, PlayerIndex } from "../../rules/game.ts";
 import { Rng } from "../../rules/rng.ts";
-import { BASE_GRID } from "./constants.ts";
+import { BASE_GRID, STRATEGIC_ARMY } from "./constants.ts";
 import { encodeExplored, lookAround, squaresOfRect } from "./fog.ts";
 import { DEFAULT_MAP_ID, mapOf } from "./maps.ts";
 import type { Point, StrategicMap } from "./types.ts";
@@ -35,6 +35,12 @@ export function startStrategic(game: Game): Game {
     bases,
     explored: [baseSquares(bases[0]), baseSquares(bases[1])],
     lastSeen: [[], []],
+    orders: {},
+    autoDoneTurn: 0,
+    shots: [],
+    events: [],
+    nextInfantry: [STRATEGIC_ARMY.infantry + 1, STRATEGIC_ARMY.infantry + 1],
+    nextShot: 1,
   };
   return lookAround(lookAround(g, 0), 1);
 }

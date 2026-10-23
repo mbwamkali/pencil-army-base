@@ -1,6 +1,6 @@
 import type { Game, PlayerIndex } from "../../rules/game.ts";
-import { rectOf, unitState, type Rect, type Unit } from "../../rules/units.ts";
-import { SIGHT } from "./constants.ts";
+import { rectOf, type Rect, type Unit } from "../../rules/units.ts";
+import { SIGHT, hpLeft, isAlive, stateOf } from "./constants.ts";
 import { mapOf, squareIndex } from "./maps.ts";
 import type { SeenUnit, StrategicMap } from "./types.ts";
 
@@ -30,7 +30,7 @@ export function distanceToRect(px: number, py: number, r: Rect): number {
 export function visibleSquares(units: readonly Unit[], map: Size): Set<number> {
   const seen = new Set<number>();
   for (const u of units) {
-    if (unitState(u) === "destroyed") continue;
+    if (!isAlive(u)) continue;
     const r = rectOf(u);
     const reach = SIGHT[u.type];
     // Only squares inside the footprint grown by the reach can be close enough; test just those.
@@ -85,7 +85,7 @@ export function decodeExplored(text: string, map: Size): Set<number> {
 
 /** An enemy unit as it stands right now, stamped with the turn it was seen on. */
 export function seenNow(u: Unit, turn: number): SeenUnit {
-  return { id: u.id, type: u.type, x: u.x, y: u.y, upright: u.upright, state: unitState(u), turn };
+  return { id: u.id, type: u.type, x: u.x, y: u.y, upright: u.upright, state: stateOf(u), hp: hpLeft(u), turn };
 }
 
 /**

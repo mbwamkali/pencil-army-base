@@ -74,7 +74,7 @@ describe("the Strategic mode entry", () => {
       id: "strategic",
       name: "Strategic (test)",
       blurb: "Test build. A big paper map hidden by fog of war: explore to find the enemy base. Two players on one phone.",
-      army: { fort: 1, tank: 2, artillery: 1, infantry: 2, wall: 2 },
+      army: { fort: 1, tank: 2, artillery: 1, infantry: 2, wall: 2, truck: 1 },
       grid: { w: 12, h: 6 },
       win: "core",
     });
@@ -83,7 +83,7 @@ describe("the Strategic mode entry", () => {
     expect(isStrategic(modeOf(undefined))).toBe(false);
     expect(BASE_GRID).toEqual({ w: 12, h: 6 });
     expect(STRATEGIC_ARMY).toEqual(MODES.strategic.army);
-    expect(SIGHT).toEqual({ fort: 4, tank: 3, artillery: 2, infantry: 1, wall: 0 });
+    expect(SIGHT).toEqual({ fort: 4, tank: 3, artillery: 2, infantry: 1, wall: 0, truck: 2 });
   });
 });
 
@@ -168,7 +168,7 @@ describe("sight", () => {
     expect(reach(unit("artillery", 10, 8))).toBe(2);
     expect(reach(unit("wall", 10, 8))).toBe(0);
     expect(visibleSquares([unit("wall", 10, 8)], medium)).toEqual(squaresAround(10, 8, 11, 8));
-    expect(visibleSquares([unit("tank", 10, 8, 1)], medium).size).toBe(0);
+    expect(visibleSquares([unit("tank", 10, 8, 3)], medium).size).toBe(0);
   });
 
   it("clips sight to the map and merges several units", () => {
@@ -341,7 +341,8 @@ describe("strategicView", () => {
         expect(v.viewer).toBe(p);
         expect(v.map.id).toBe("medium-1");
         expect(v.base).toEqual(g.strategic!.bases[p]);
-        expect(v.units).toEqual(g.players[p].units);
+        expect(v.units.map((u) => ({ id: u.id, type: u.type, x: u.x, y: u.y, upright: u.upright, hits: 0 }))).toEqual(g.players[p].units);
+        expect(v.units.every((u) => u.owner === p && u.current && u.state === "normal" && u.hp === u.maxHp)).toBe(true);
         expect(v.enemies).toEqual([]);
         for (const i of v.visible) expect(v.explored.has(i)).toBe(true);
         for (const i of squaresOfRect({ ...v.base, ...BASE_GRID }, medium)) expect(v.explored.has(i)).toBe(true);
@@ -364,11 +365,11 @@ describe("strategicView", () => {
       const v = strategicView(g, 0);
       const lastSeen = g.strategic!.lastSeen[0];
       for (const e of v.enemies) {
-        const live = g.players[1].units.find((u) => u.id === e.unit.id)!;
+        const live = g.players[1].units.find((u) => u.id === e.id)!;
         if (e.current) expect(unitSeen(live, v.visible, medium)).toBe(true);
-        else expect(lastSeen.some((s) => s.id === e.unit.id)).toBe(true);
+        else expect(lastSeen.some((s) => s.id === e.id)).toBe(true);
       }
-      const listed = new Set(v.enemies.map((e) => e.unit.id));
+      const listed = new Set(v.enemies.map((e) => e.id));
       for (const u of g.players[1].units) {
         if (!listed.has(u.id)) expect(unitSeen(u, v.visible, medium)).toBe(false);
       }
@@ -381,8 +382,9 @@ describe("strategicView", () => {
     const scout = g.players[1].units.find((u) => u.type === "infantry")!;
     scout.x = fort.x + 4; // one square inside the fort's sight (4 beyond its right edge is x + 3 + 3)
     scout.y = fort.y + 1;
-    const sighting = { id: scout.id, type: "infantry", x: scout.x, y: scout.y, upright: false, state: "normal", turn: 1 };
-    expect(strategicView(g, 0).enemies).toEqual([{ unit: sighting, current: true }]);
+    const sighting = { id: scout.id, type: "infantry", x: scout.x, y: scout.y, upright: false, state: "normal", hp: 1, turn: 1 };
+    const drawn = { id: scout.id, type: "infantry", x: scout.x, y: scout.y, upright: false, state: "normal", hp: 1, maxHp: 1, owner: 1 };
+    expect(strategicView(g, 0).enemies).toEqual([{ ...drawn, current: true }]);
     expect(strategicView(g, 1).enemies.length).toBeGreaterThan(0); // the scout sees the fort back
     // Ending the turn records the sighting; the scout then slips away.
     const ended = ok(endStrategicTurn(g));
@@ -390,7 +392,7 @@ describe("strategicView", () => {
     const later = structuredClone(ended);
     later.phase = "turn";
     later.players[1].units.find((u) => u.id === scout.id)!.x = medium.w - 2;
-    expect(strategicView(later, 0).enemies).toEqual([{ unit: sighting, current: false }]);
+    expect(strategicView(later, 0).enemies).toEqual([{ ...drawn, current: false, seenTurn: 1 }]);
     // A fresh sighting replaces the old record rather than adding a second one.
     const back = lookAround(g, 0);
     expect(lookAround(back, 0).strategic!.lastSeen[0]).toHaveLength(1);

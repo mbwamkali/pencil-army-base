@@ -74,7 +74,7 @@ describe("mode presets", () => {
   it("has the four modes, with Skirmish and Strategic smaller and the others the full army", () => {
     // Strategic comes last so the mode byte in older layout codes still means the same mode.
     expect(MODE_IDS).toEqual(["skirmish", "battle", "score", "strategic"]);
-    expect(MODES.skirmish.army).toEqual({ fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2 });
+    expect(MODES.skirmish.army).toEqual({ fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2, truck: 0 });
     expect(MODES.skirmish.grid).toEqual({ w: 12, h: 6 });
     for (const id of ["battle", "score"] as const) {
       expect(MODES[id].grid).toEqual({ w: 20, h: 10 });
@@ -82,7 +82,7 @@ describe("mode presets", () => {
     }
     expect(MODES.score.shotsEach).toBe(20);
     expect(MODES.strategic.grid).toEqual(MODES.skirmish.grid);
-    expect(MODES.strategic.army).toEqual({ ...MODES.skirmish.army, tank: 2 });
+    expect(MODES.strategic.army).toEqual({ ...MODES.skirmish.army, tank: 2, truck: 1 });
     expect(MODES.strategic.name).toBe("Strategic (test)");
     expect(isStrategic(MODES.strategic)).toBe(true);
     expect(MODE_IDS.filter((id) => isStrategic(MODES[id]))).toEqual(["strategic"]);
@@ -98,7 +98,7 @@ describe("mode presets", () => {
   });
 
   it("scores infantry 1, tank and artillery 3, fort 5 and walls 0", () => {
-    expect(POINTS).toEqual({ infantry: 1, tank: 3, artillery: 3, fort: 5, wall: 0 });
+    expect(POINTS).toEqual({ infantry: 1, tank: 3, artillery: 3, fort: 5, wall: 0, truck: 2 });
   });
 });
 
