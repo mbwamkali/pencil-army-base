@@ -19,7 +19,7 @@ import {
 import { applyDamage } from "./damage.ts";
 import { distanceToRect, lookAround, unitSeen, visibleSquares } from "./fog.ts";
 import { mapOf, squareIndex } from "./maps.ts";
-import type { MapShot, OrderState, Point, ShotHitRecord, StrategicMap, StrategicState } from "./types.ts";
+import type { MapShot, OrderState, Point, RiderMove, ShotHitRecord, StrategicMap, StrategicState } from "./types.ts";
 
 /**
  * Orders: what the current player tells their tanks, artillery and truck to do. Each unit may use
@@ -95,9 +95,10 @@ export function ridersFor(game: Game, truckId: string): string[] {
  * first square still free. Only a rider's own square counts as free for it: handing out a square
  * another rider is still standing on could leave that rider, should it then find no room, sharing
  * its square with the first. A rider whose best square is the one it stands on, or that finds no
- * free square, stays where it was and is not a rider. Changes the game in place; returns who rode.
+ * free square, stays where it was and is not a rider. Changes the game in place; returns who rode
+ * and where each one went, so a replay can move them too.
  */
-function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, riders: readonly string[]): string[] {
+function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, riders: readonly string[]): RiderMove[] {
   const s = g.strategic as StrategicState;
   const map = mapOf(s.map);
   const goal = baseCentre(s, other(p));
@@ -105,14 +106,14 @@ function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, riders: readonly st
     .map((sq, i) => ({ sq, i, d: Math.hypot(sq.x + 0.5 - goal.x, sq.y + 0.5 - goal.y) }))
     .sort((a, b) => a.d - b.d || a.i - b.i)
     .map((c) => c.sq);
-  const rode: string[] = [];
+  const rode: RiderMove[] = [];
   for (const id of riders) {
     const rider = g.players[p].units.find((u) => u.id === id) as Unit;
     const spot = spots.find((sq) => isFree(map, allUnits(g), footprintAt(rider, sq.x, sq.y), new Set([rider])));
     if (!spot || (spot.x === rider.x && spot.y === rider.y)) continue;
+    rode.push({ unitId: id, from: { x: rider.x, y: rider.y }, to: { x: spot.x, y: spot.y } });
     rider.x = spot.x;
     rider.y = spot.y;
-    rode.push(id);
   }
   return rode;
 }
@@ -141,7 +142,17 @@ export function moveUnit(game: Game, unitId: string, to: Point): Outcome {
   const rode = setDownRiders(g, p, mover, riders);
   g = lookAround(g, p);
   const after = g.strategic as StrategicState;
-  after.events.push({ kind: "move", turn: g.turn, player: p, unitId, type: unit.type, from, to: { x: to.x, y: to.y }, riders: rode });
+  after.events.push({
+    kind: "move",
+    turn: g.turn,
+    player: p,
+    unitId,
+    type: unit.type,
+    from,
+    to: { x: to.x, y: to.y },
+    riders: rode.map((r) => r.unitId),
+    riderMoves: rode,
+  });
   after.orders[unitId] = { ...order, moved: true };
   return { ok: true, game: g };
 }

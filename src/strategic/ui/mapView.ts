@@ -1,9 +1,10 @@
 import { SHOT_RADIUS } from "../../rules/constants.ts";
+import type { PlayerIndex } from "../../rules/game.ts";
 import { sizeOf, type Rect } from "../../rules/units.ts";
 import { SHIELD_PATH, drawShotImage, drawUnit } from "../../ui/board.ts";
 import { el, sv } from "../../ui/dom.ts";
 import { SHAKE_RADIUS } from "../rules/constants.ts";
-import type { DrawnUnit, MapShot, Point, StrategicMap, StrategicView } from "../rules/types.ts";
+import type { DrawnUnit, MapShot, Point, ReplayMark, StrategicMap, StrategicView } from "../rules/types.ts";
 import {
   BASE_SIZE,
   SCALE_MAX,
@@ -12,8 +13,11 @@ import {
   baseCamera,
   centreCamera,
   clampCamera,
+  easeInOut,
   fitCamera,
+  inViewport,
   isWholeCamera,
+  lerpCamera,
   panCamera,
   pinchCamera,
   toMap,
@@ -32,7 +36,8 @@ export * from "./camera.ts";
  * bottom-left corner. Everything is drawn once from a StrategicView; panning and zooming only move
  * the viewBox and the mini-map's viewport rectangle, so a big map stays smooth on a phone. The turn
  * screen draws its selection, reach and aim marks into `overlay`, which it clears and refills as the
- * player taps, without touching the rest.
+ * player taps, without touching the rest. The handover replay draws its tracks, shots and fights
+ * there too, slides the units that moved and pans to where each step happened.
  *
  * World units are map squares times SQ_NEAR, so unit art and stroke widths look right at scale 1.
  */
@@ -56,7 +61,21 @@ export interface MapViewOptions {
   minimap?: boolean;
   /** The players' names, by player index. When given (the results screen) bases and halves are labelled by name instead of "Your" and "Enemy". */
   names?: [string, string];
+  /**
+   * Where units went (the results screen): dotted lines through footprint centres in map squares,
+   * drawn between the shot marks and the units, ink for the viewer's side and red for the other.
+   */
+  tracks?: readonly { owner: PlayerIndex; points: readonly Point[] }[];
+  /**
+   * Stage px along the view's bottom edge that something drawn over the map covers (the replay's
+   * controls pill). The whole-map fit and every pan and zoom limit keep the map's last row reachable
+   * above it. 0 by default.
+   */
+  bottomInset?: number;
 }
+
+/** A shot as a replay marks it: where it landed and, when the viewer could see the shooter, where it came from. */
+export type ShotMark = Pick<Extract<ReplayMark, { kind: "shot" }>, "shotId" | "weapon" | "x" | "y" | "from">;
 
 export interface MapView {
   /** Positioned box of width x height; holds the svg and the mini-map. */
@@ -92,6 +111,27 @@ export interface MapView {
   clearOverlay(): void;
   /** The unit whose footprint holds a map point: the viewer's living units first, then enemies in sight. */
   unitAt(p: Point): DrawnUnit | null;
+  /**
+   * A replay track in the overlay: a dotted line through map points with a small arrowhead at its
+   * end, ink for the viewer's own units and red for the enemy's. It stops at the edge of the unit
+   * standing at its end, so the arrow points at the unit instead of hiding on its drawing.
+   */
+  markTrack(points: readonly Point[], owner: PlayerIndex): SVGGElement;
+  /** A replay shot in the overlay: a ring where it landed and, when the shooter was in sight, a thin line from it. */
+  markShot(mark: ShotMark): SVGGElement;
+  /** A fight in the overlay: a small star of four short strokes. */
+  markClash(at: Point): SVGGElement;
+  /** A new infantry in the overlay: a small ring around its square. */
+  markSpawn(at: Point): SVGCircleElement;
+  /**
+   * Slides a drawn living unit (own or enemy) from `from` to where it is drawn, `to` (top-left
+   * squares), over `ms`. Does nothing when the unit is not drawn or ms is 0.
+   */
+  slideUnit(unitId: string, owner: PlayerIndex, from: Point, to: Point, ms: number): void;
+  /** Whether a map point lies in the middle of the view, `margin` of the view kept clear on each side. */
+  inView(p: Point, margin?: number): boolean;
+  /** Pans to a map point at the current scale, eased over `ms` (0: at once), clamped; a finger on the map stops it. */
+  panTo(p: Point, ms: number): void;
 }
 
 /** Pencil look: the same tones as style.css, set as attributes so the map looks right before any CSS lands. */
@@ -117,6 +157,12 @@ const MARK_STROKE: Record<string, string> = {
 const MARK_FILL: Record<string, string> = {
   "strategic-reach": "rgba(47, 95, 167, 0.18)",
 };
+
+/** A replay track's arrowhead: arm length and half-angle, in world units and radians. */
+const ARROW_LEN = 11;
+const ARROW_SPREAD = 0.5;
+/** How far outside the unit at its end a replay track stops, in squares, so the arrow tip just touches the drawing's box. */
+const TRACK_GAP = 0.05;
 
 /** A press that moves less than this many screen pixels and lifts within TAP_MS is a tap, not a pan. */
 const TAP_SLOP = 10;
@@ -176,6 +222,75 @@ export function unitAtPoint(view: Pick<StrategicView, "units" | "enemies">, p: P
   );
 }
 
+/** A polyline through map points as an SVG path in world units. */
+export function trackPath(points: readonly Point[], unit: number): string {
+  return points.map((p, k) => `${k === 0 ? "M" : "L"}${round2(p.x * unit)} ${round2(p.y * unit)}`).join("");
+}
+
+/**
+ * The polyline cut where it last enters `rect` (grown by `pad`) on its way to the end, which lies
+ * inside it: the track then stops at the edge of the unit standing at its end. Unchanged when the end
+ * is outside the rect; null when the whole line lies inside it (a short move of a big unit).
+ */
+export function trimTrack(points: readonly Point[], rect: Rect, pad: number): Point[] | null {
+  const r = { x0: rect.x - pad, y0: rect.y - pad, x1: rect.x + rect.w + pad, y1: rect.y + rect.h + pad };
+  const inside = (p: Point): boolean => p.x > r.x0 && p.x < r.x1 && p.y > r.y0 && p.y < r.y1;
+  const end = points[points.length - 1];
+  if (!end || !inside(end)) return [...points];
+  for (let k = points.length - 2; k >= 0; k--) {
+    const a = points[k]!;
+    if (inside(a)) continue;
+    // The segment a -> b crosses into the rect: the latest entry time over both axes is where it gets in.
+    const b = points[k + 1]!;
+    const enter = (p0: number, p1: number, lo: number, hi: number): number => {
+      if (p0 === p1) return 0;
+      return Math.min((lo - p0) / (p1 - p0), (hi - p0) / (p1 - p0));
+    };
+    const t = Math.max(0, Math.min(1, Math.max(enter(a.x, b.x, r.x0, r.x1), enter(a.y, b.y, r.y0, r.y1))));
+    return [...points.slice(0, k + 1), { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }];
+  }
+  return null;
+}
+
+/**
+ * For a track that lies wholly inside the unit at its end: a tiny stretch ending on the edge of the
+ * rect (grown by `pad`), on the line from the track's first point to its last, so an arrowhead there
+ * points at the unit from the side it came from. Null when the track has no length.
+ */
+export function edgeArrow(points: readonly Point[], rect: Rect, pad: number): [Point, Point] | null {
+  const start = points[0];
+  const end = points[points.length - 1];
+  if (!start || !end) return null;
+  const d = Math.hypot(end.x - start.x, end.y - start.y);
+  if (d < 1e-9) return null;
+  const ux = (end.x - start.x) / d;
+  const uy = (end.y - start.y) / d;
+  // Walking back from the end along the track, how far until each pair of sides is crossed.
+  const back = (e: number, u: number, lo: number, hi: number): number => (u > 0 ? (e - lo) / u : u < 0 ? (e - hi) / u : Infinity);
+  const t = Math.min(back(end.x, ux, rect.x - pad, rect.x + rect.w + pad), back(end.y, uy, rect.y - pad, rect.y + rect.h + pad));
+  const tip = { x: end.x - t * ux, y: end.y - t * uy };
+  return [{ x: tip.x - 0.1 * ux, y: tip.y - 0.1 * uy }, tip];
+}
+
+/** An open arrowhead (two short strokes) at the end of a polyline in world units, pointing along its last stretch. */
+export function arrowHeadPath(points: readonly Point[], len = ARROW_LEN, spread = ARROW_SPREAD): string {
+  const tip = points[points.length - 1];
+  if (!tip) return "";
+  // The last point far enough back to give a direction: a sampled track may end in tiny steps.
+  let k = points.length - 2;
+  while (k > 0 && Math.hypot(tip.x - points[k]!.x, tip.y - points[k]!.y) < 1e-6) k--;
+  const from = points[k];
+  if (!from || (from.x === tip.x && from.y === tip.y)) return "";
+  const angle = Math.atan2(tip.y - from.y, tip.x - from.x);
+  const arm = (a: number): string => `${round2(tip.x - len * Math.cos(a))} ${round2(tip.y - len * Math.sin(a))}`;
+  return `M${arm(angle - spread)}L${round2(tip.x)} ${round2(tip.y)}L${arm(angle + spread)}`;
+}
+
+/** Two decimals are plenty in world units, and keep the paths short. */
+function round2(v: number): number {
+  return Math.round(v * 100) / 100;
+}
+
 export function createMapView(opts: MapViewOptions): MapView {
   const { view, width, height } = opts;
   const map = view.map;
@@ -185,7 +300,8 @@ export function createMapView(opts: MapViewOptions): MapView {
   const uid = `strategic-${++viewCount}`;
   const ids = { hatch: `${uid}-hatch`, clip: `${uid}-explored`, tree: `${uid}-tree`, miniClip: `${uid}-mini-explored` };
   const who = labelsFor(view, opts.names);
-  let cam = clampCamera(opts.camera, map, width, height);
+  const inset = opts.bottomInset ?? 0;
+  let cam = clampCamera(opts.camera, map, width, height, inset);
 
   const explored = squaresPath(view.explored, map.w, S);
   const { marks, stamps } = shotLayers(view, S);
@@ -248,6 +364,7 @@ export function createMapView(opts: MapViewOptions): MapView {
     // 6. shot marks under the units (a smudge never hides a crossed-off unit), then the armies,
     // then shields and hit point badges, which must stay readable over any unit.
     marks,
+    tracksGroup(view, opts.tracks ?? [], S),
     unitsGroup(view, S),
     stamps,
     badgesGroup(view, S),
@@ -323,7 +440,7 @@ export function createMapView(opts: MapViewOptions): MapView {
 
   /** The only thing a pan or zoom changes: the viewBox, the mini-map's viewport rectangle, and the app's memory. */
   const setCam = (c: Camera): void => {
-    cam = clampCamera(c, map, width, height);
+    cam = clampCamera(c, map, width, height, inset);
     svg.setAttribute("viewBox", viewBoxOf(cam, width, height));
     const r = viewportRect(cam, width, height);
     miniView.setAttribute("x", String(r.x));
@@ -335,7 +452,28 @@ export function createMapView(opts: MapViewOptions): MapView {
   const r0 = viewportRect(cam, width, height);
   for (const [k, v] of Object.entries({ x: r0.x, y: r0.y, width: r0.w, height: r0.h })) miniView.setAttribute(k, String(v));
 
-  const focusBase = (): void => setCam(baseCamera(map, view.base, width, height));
+  const focusBase = (): void => setCam(baseCamera(map, view.base, width, height, inset));
+
+  // An eased pan (the replay moving to the next step) runs one animation frame at a time. A finger,
+  // the wheel or the mini-map takes over at once, and a view taken off the page jumps to the end.
+  let panFrame = 0;
+  const stopPan = (): void => {
+    if (panFrame) cancelAnimationFrame(panFrame);
+    panFrame = 0;
+  };
+  const panTo = (p: Point, ms: number): void => {
+    stopPan();
+    const from = cam;
+    const to = centreCamera(cam, p, map, width, height, inset);
+    if (ms <= 0 || typeof requestAnimationFrame !== "function") return setCam(to);
+    const t0 = performance.now();
+    const step = (now: number): void => {
+      const t = root.isConnected ? (now - t0) / ms : 1;
+      setCam(t >= 1 ? to : lerpCamera(from, to, easeInOut(t)));
+      panFrame = t >= 1 ? 0 : requestAnimationFrame(step);
+    };
+    panFrame = requestAnimationFrame(step);
+  };
 
   /** Pointer position in stage px from the view's top-left: the stage is CSS-scaled, so divide by the on-screen scale. */
   const local = (e: { clientX: number; clientY: number }): Point => {
@@ -367,6 +505,7 @@ export function createMapView(opts: MapViewOptions): MapView {
   svg.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     e.preventDefault();
+    stopPan();
     svg.setPointerCapture(e.pointerId);
     const p = local(e);
     pointers.set(e.pointerId, p);
@@ -379,11 +518,11 @@ export function createMapView(opts: MapViewOptions): MapView {
     pointers.set(e.pointerId, p);
     if (pinch && pointers.size >= 2) {
       const now = twoFingers();
-      setCam(pinchCamera(cam, pinch, now, map, width, height));
+      setCam(pinchCamera(cam, pinch, now, map, width, height, inset));
       pinch = now;
     } else if (drag) {
       if (Math.hypot(e.clientX - drag.client.x, e.clientY - drag.client.y) > TAP_SLOP) drag.moved = true;
-      setCam(panCamera(cam, { x: p.x - drag.from.x, y: p.y - drag.from.y }, map, width, height));
+      setCam(panCamera(cam, { x: p.x - drag.from.x, y: p.y - drag.from.y }, map, width, height, inset));
       drag.from = p;
     }
   });
@@ -406,7 +545,7 @@ export function createMapView(opts: MapViewOptions): MapView {
       // Double tap: a zoom step in, or back to the base once zoomed all the way in.
       lastTap = null;
       if (cam.scale >= SCALE_MAX - 1e-6) focusBase();
-      else setCam(zoomAbout(cam, at, ZOOM_STEP, map, width, height));
+      else setCam(zoomAbout(cam, at, ZOOM_STEP, map, width, height, inset));
       return;
     }
     // A tap the screen used is an order, not the first half of a double tap.
@@ -419,8 +558,9 @@ export function createMapView(opts: MapViewOptions): MapView {
     "wheel",
     (e) => {
       e.preventDefault();
+      stopPan();
       const p = local(e);
-      setCam(zoomAbout(cam, toMap(cam, p, width, height), Math.exp(-e.deltaY * 0.002), map, width, height));
+      setCam(zoomAbout(cam, toMap(cam, p, width, height), Math.exp(-e.deltaY * 0.002), map, width, height, inset));
     },
     { passive: false },
   );
@@ -433,6 +573,7 @@ export function createMapView(opts: MapViewOptions): MapView {
   };
   mini.addEventListener("pointerdown", (e) => {
     e.preventDefault();
+    stopPan();
     mini.setPointerCapture(e.pointerId);
     miniDown = true;
     recentre(e);
@@ -496,21 +637,158 @@ export function createMapView(opts: MapViewOptions): MapView {
     return g;
   };
 
+  // Replay marks: ink for the viewer's side, red for the other, as on the results screen.
+  const tone = (owner: PlayerIndex | undefined): string => (owner === view.viewer ? INK : RED);
+
+  const markTrack = (points: readonly Point[], owner: PlayerIndex): SVGGElement => {
+    // The line stops at the edge of the unit it leads to, so the arrow points at the drawing instead
+    // of sitting on it. A move too short to leave the unit's own box gets just the arrow, on its edge.
+    const at = points[points.length - 1];
+    const unit = at ? unitAtPoint(view, at) : null;
+    const box = unit ? footprintOf(unit) : null;
+    const trimmed = box ? trimTrack(points, box, TRACK_GAP) : [...points];
+    const edge = !trimmed && box ? edgeArrow(points, box, TRACK_GAP) : null;
+    const line = trimmed ?? edge ?? [...points];
+    const world = line.map((p) => ({ x: p.x * S, y: p.y * S }));
+    const g = sv(
+      "g",
+      {
+        class: "strategic-replay-track",
+        "data-owner": owner === view.viewer ? "own" : "enemy",
+        fill: "none",
+        stroke: tone(owner),
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      },
+      !edge && sv("path", { d: trackPath(line, S), "stroke-width": 3, "stroke-dasharray": "0.1 8", class: "strategic-replay-track-line" }),
+      sv("path", { d: arrowHeadPath(world), "stroke-width": 2.5, class: "strategic-replay-track-arrow" }),
+    );
+    overlay.append(g);
+    return g;
+  };
+
+  const markShot = (mark: ShotMark): SVGGElement => {
+    const stroke = tone(view.shots.find((s) => s.id === mark.shotId)?.by);
+    const cx = mark.x * S;
+    const cy = mark.y * S;
+    const r = SHOT_RADIUS * S;
+    let line: SVGPathElement | null = null;
+    if (mark.from) {
+      // From the edge of the shooter's drawing to the ring, so neither the gun nor the landing spot is crossed out.
+      const shooter = unitAtPoint(view, mark.from);
+      const out = shooter ? trimTrack([{ x: mark.x, y: mark.y }, mark.from], footprintOf(shooter), TRACK_GAP) : null;
+      const start = out?.[out.length - 1] ?? mark.from;
+      const dx = cx - start.x * S;
+      const dy = cy - start.y * S;
+      const d = Math.hypot(dx, dy);
+      if (d > r) {
+        const k = (d - r) / d;
+        line = sv("path", {
+          d: `M${round2(start.x * S)} ${round2(start.y * S)}L${round2(start.x * S + dx * k)} ${round2(start.y * S + dy * k)}`,
+          stroke,
+          "stroke-width": 1.5,
+          "stroke-linecap": "round",
+          class: "strategic-replay-shot-line",
+        });
+      }
+    }
+    const g = sv(
+      "g",
+      { class: "strategic-replay-shot", "data-shot": mark.shotId, "data-weapon": mark.weapon, "data-from": mark.from ? "seen" : "hidden" },
+      line,
+      sv("circle", { cx, cy, r, fill: stroke, "fill-opacity": 0.08, stroke, "stroke-width": 2.5, class: "strategic-replay-shot-ring" }),
+    );
+    overlay.append(g);
+    return g;
+  };
+
+  const markClash = (at: Point): SVGGElement => {
+    const cx = at.x * S;
+    const cy = at.y * S;
+    const strokes = [0, 1, 2, 3].map((k) => {
+      const a = Math.PI / 4 + (k * Math.PI) / 2;
+      return `M${round2(cx + 5 * Math.cos(a))} ${round2(cy + 5 * Math.sin(a))}L${round2(cx + 13 * Math.cos(a))} ${round2(cy + 13 * Math.sin(a))}`;
+    });
+    // A paper halo under the red strokes keeps the star readable over a crossed-out (red) wreck.
+    const g = sv(
+      "g",
+      { class: "strategic-replay-clash", "data-at": `${at.x},${at.y}`, fill: "none", "stroke-linecap": "round" },
+      sv("path", { d: strokes.join(""), stroke: PAPER, "stroke-width": 6.5, opacity: 0.9 }),
+      sv("path", { d: strokes.join(""), stroke: RED, "stroke-width": 3 }),
+    );
+    overlay.append(g);
+    return g;
+  };
+
+  const markSpawn = (at: Point): SVGCircleElement => {
+    const owner = unitAtPoint(view, at)?.owner ?? view.viewer;
+    const ring = sv("circle", {
+      cx: at.x * S,
+      cy: at.y * S,
+      r: 0.78 * S,
+      fill: "none",
+      stroke: tone(owner),
+      "stroke-width": 2,
+      "stroke-dasharray": "5 4",
+      class: "strategic-replay-spawn",
+      "data-owner": owner === view.viewer ? "own" : "enemy",
+    });
+    overlay.append(ring);
+    return ring;
+  };
+
+  const slideUnit = (unitId: string, owner: PlayerIndex, from: Point, to: Point, ms: number): void => {
+    const side = owner === view.viewer ? "strategic-units" : "strategic-enemies";
+    const layer = svg.querySelector(`.${side}.living`);
+    const unit = layer ? [...layer.children].find((c) => c.getAttribute("data-unit") === unitId) : undefined;
+    const dx = (from.x - to.x) * S;
+    const dy = (from.y - to.y) * S;
+    if (!unit || ms <= 0 || (dx === 0 && dy === 0) || typeof requestAnimationFrame !== "function") return;
+    // The hit point badge travels with its unit. Both sides use the same ids, so the owner picks it.
+    const badge = [...svg.querySelectorAll(".strategic-hp")].find(
+      (b) => b.getAttribute("data-hp-for") === unitId && b.getAttribute("data-owner") === (owner === view.viewer ? "own" : "enemy"),
+    );
+    const moving = [unit, badge].filter((e): e is Element => !!e).map((e) => ({ e, base: e.getAttribute("transform") ?? "" }));
+    // The offset goes in front of a mirrored unit's own transform, so the drawing still faces the right way.
+    const put = (left: number): void => {
+      for (const { e, base } of moving) {
+        const t = `${left > 0 ? `translate(${round2(dx * left)} ${round2(dy * left)}) ` : ""}${base}`.trim();
+        if (t) e.setAttribute("transform", t);
+        else e.removeAttribute("transform");
+      }
+    };
+    put(1);
+    const t0 = performance.now();
+    const step = (now: number): void => {
+      const t = root.isConnected ? (now - t0) / ms : 1;
+      put(t >= 1 ? 0 : 1 - easeInOut(t));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
   return {
     root,
     svg,
     overlay,
     camera: () => cam,
     setCamera: setCam,
-    fitWhole: () => setCam(fitCamera(map, width, height)),
+    fitWhole: () => setCam(fitCamera(map, width, height, inset)),
     focusBase,
-    isWhole: () => isWholeCamera(cam, map, width, height),
-    centreOn: (p) => setCam(centreCamera(cam, p, map, width, height)),
+    isWhole: () => isWholeCamera(cam, map, width, height, inset),
+    centreOn: (p) => setCam(centreCamera(cam, p, map, width, height, inset)),
     markSquares,
     markRect,
     markAim,
     clearOverlay: () => overlay.replaceChildren(),
     unitAt: (p) => unitAtPoint(view, p),
+    markTrack,
+    markShot,
+    markClash,
+    markSpawn,
+    slideUnit,
+    inView: (p, margin) => inViewport(cam, p, width, height, margin),
+    panTo,
   };
 }
 
@@ -604,15 +882,39 @@ function unitsGroup(view: StrategicView, S: number): SVGGElement {
   );
 }
 
+/**
+ * Where units went, on the results screen: one thin dotted line per unit that moved, under the units
+ * so no drawing is crossed out by its own trail. Ink for the viewer's side, red for the other.
+ */
+function tracksGroup(view: StrategicView, tracks: NonNullable<MapViewOptions["tracks"]>, S: number): SVGGElement {
+  const g = sv("g", { class: "strategic-tracks", fill: "none", "stroke-linecap": "round", "stroke-linejoin": "round" });
+  for (const t of tracks) {
+    if (t.points.length < 2) continue;
+    const own = t.owner === view.viewer;
+    g.append(
+      sv("path", {
+        d: trackPath(t.points, S),
+        stroke: own ? INK : RED,
+        "stroke-width": 2,
+        "stroke-dasharray": "0.1 6",
+        opacity: 0.85,
+        class: "strategic-track",
+        "data-owner": own ? "own" : "enemy",
+      }),
+    );
+  }
+  return g;
+}
+
 /** Hit point badges for every damaged unit that has more than one hit point, above the units so no neighbour covers them. */
 function badgesGroup(view: StrategicView, S: number): SVGGElement {
   const g = sv("g", { class: "strategic-badges" });
-  for (const u of [...view.units, ...view.enemies]) if (u.state === "damaged" && u.maxHp > 1) g.append(hpBadge(u, S));
+  for (const u of [...view.units, ...view.enemies]) if (u.state === "damaged" && u.maxHp > 1) g.append(hpBadge(u, S, u.owner === view.viewer));
   return g;
 }
 
 /** "2/3" in a small paper pill tucked into the footprint's bottom-right corner, 11 world units of text. */
-function hpBadge(u: DrawnUnit, S: number): SVGGElement {
+function hpBadge(u: DrawnUnit, S: number, own: boolean): SVGGElement {
   const r = footprintOf(u);
   const text = `${u.hp}/${u.maxHp}`;
   const h = 14;
@@ -621,7 +923,7 @@ function hpBadge(u: DrawnUnit, S: number): SVGGElement {
   const bottom = (r.y + r.h) * S + 2;
   return sv(
     "g",
-    { class: "strategic-hp", "data-hp-for": u.id, opacity: inkOf(u) },
+    { class: "strategic-hp", "data-hp-for": u.id, "data-owner": own ? "own" : "enemy", opacity: inkOf(u) },
     sv("rect", { x: right - w, y: bottom - h, width: w, height: h, rx: h / 2, fill: PAPER, stroke: INK, "stroke-width": 1 }),
     sv(
       "text",

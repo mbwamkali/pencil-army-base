@@ -15,7 +15,8 @@ export function oppositeSpot(spot: Point, map: Pick<StrategicMap, "w" | "h">): P
  * with the game's Rng, player 2 gets its opposite, and every unit moves from base squares to map
  * squares. Player 2's layout is not flipped: they built it facing left and their base sits in the
  * right half, so it already faces the enemy. Each player starts knowing their whole base plus what
- * their units can see. Returns a new game; a game that is already set up comes back unchanged.
+ * their units can see. The armies are copied as they land, so replays can rebuild any later moment.
+ * Returns a new game; a game that is already set up comes back unchanged.
  */
 export function startStrategic(game: Game): Game {
   if (game.strategic) return game;
@@ -41,6 +42,8 @@ export function startStrategic(game: Game): Game {
     events: [],
     nextInfantry: [STRATEGIC_ARMY.infantry + 1, STRATEGIC_ARMY.infantry + 1],
     nextShot: 1,
+    // The armies as they stand now, before any turn: every later moment is rebuilt from here and the events.
+    start: [structuredClone(g.players[0].units), structuredClone(g.players[1].units)],
   };
   return lookAround(lookAround(g, 0), 1);
 }

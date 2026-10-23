@@ -1,0 +1,248 @@
+/*
+ * Strategic replays (stage 3): the handover replay a player sees before their turn, and the whole
+ * match replayed from the results screen. The map fills the stage left of a 176 px panel, like the
+ * turn screen; a chip names whose turn is showing and a paper pill along the map's bottom edge holds
+ * play/pause, the progress bar and the step counter.
+ */
+body[data-screen="strategic-replay"] #stage {
+  background: #e6e2d8;
+}
+
+.strategic-replay .replay-map {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 744px;
+  height: 412px;
+  overflow: hidden;
+  background: #e6e2d8;
+}
+
+/* Whose turn is showing: dark ink with paper text, as on the mockup, so it reads over fog and paper alike. */
+.replay-chip {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  max-width: 420px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: #fffdf7;
+  font-size: 17px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Compact and centred, so it hides as little of the map as it can; the replay keeps its action above it. */
+.replay-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  width: 420px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 16px 3px 3px;
+  border: 1.5px solid var(--ink);
+  border-radius: 26px;
+  background: rgba(250, 249, 244, 0.94);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+}
+
+.replay-play {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: #fffdf7;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.replay-play svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.replay-progress {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #ddd5c2;
+  overflow: hidden;
+}
+
+.replay-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ink);
+  transition: width 0.3s ease-out;
+}
+
+.replay-counter {
+  flex: none;
+  font-size: 17px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* The panel: the same box as the turn screen's, with the step list taking whatever room is left. */
+.strategic-replay .panel {
+  left: 744px;
+  width: 176px;
+  padding: 6px 8px 8px;
+  gap: 4px;
+}
+
+.strategic-replay .panel > * {
+  flex-shrink: 0;
+}
+
+.strategic-replay .panel .menu-btn {
+  min-height: 40px;
+  font-size: 16px;
+}
+
+.strategic-replay .panel .btn.primary {
+  min-height: 44px;
+  font-size: 19px;
+}
+
+.replay-title {
+  font-size: 20px;
+  line-height: 1.05;
+  text-align: center;
+  margin-top: 2px;
+}
+
+.strategic-replay .panel .rule {
+  margin: 1px 0 0;
+}
+
+/*
+ * The steps: one button each, the current one bold. The list is the only part of the panel that
+ * gives way, so a long list (or larger text) scrolls inside its own box above the button.
+ */
+.strategic-replay .panel > .replay-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0 -6px;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+}
+
+.replay-list.more-below {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
+}
+
+.replay-list.more-above {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px);
+  mask-image: linear-gradient(to bottom, transparent, #000 16px);
+}
+
+.replay-list.more-above.more-below {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 16px, #000 calc(100% - 16px), transparent);
+}
+
+.replay-step {
+  flex: none;
+  display: flex;
+  gap: 3px;
+  align-items: baseline;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 5px;
+  border: 1.5px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.12;
+  text-align: left;
+  cursor: pointer;
+}
+
+.replay-step.current {
+  font-weight: bold;
+  border-color: var(--edge);
+  background: #fff;
+}
+
+.replay-step-n {
+  flex: none;
+  color: var(--ink-soft);
+}
+
+.replay-step-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Enemy steps first, then the player's own start of turn under a small divider. */
+.replay-divider {
+  flex: none;
+  margin: 3px 4px 1px;
+  padding-top: 3px;
+  border-top: 1px dashed #c9c1ad;
+  font-size: 12px;
+  line-height: 1.1;
+  color: var(--ink-soft);
+}
+
+.replay-empty {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replay-progress-fill {
+    transition: none;
+  }
+}
+
+/* Larger text: the list a step up (it scrolls when it no longer fits), the title and counter a little. */
+body.large-text .replay-step,
+body.large-text .replay-empty {
+  font-size: 16px;
+}
+
+body.large-text .replay-divider {
+  font-size: 14px;
+}
+
+body.large-text .replay-title {
+  font-size: 21px;
+}
+
+body.large-text .replay-chip,
+body.large-text .replay-counter {
+  font-size: 18px;
+}

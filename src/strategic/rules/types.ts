@@ -1,6 +1,6 @@
 import type { UnitType } from "../../rules/constants.ts";
 import type { PlayerIndex } from "../../rules/game.ts";
-import type { UnitState } from "../../rules/units.ts";
+import type { Unit, UnitState } from "../../rules/units.ts";
 
 /**
  * Strategic mode: a big paper map with fog of war. These types are the contract between the
@@ -100,9 +100,27 @@ export interface MapShot {
   revealed: boolean;
 }
 
-/** Everything that happens on the map, in order, so a later build can replay the enemy's turn. */
+/** Where one truck rider was lifted from and set down (top-left squares). */
+export interface RiderMove {
+  unitId: string;
+  from: Point;
+  to: Point;
+}
+
+/** Everything that happens on the map, in order, so the handover replay can rebuild any moment. */
 export type StrategicEvent =
-  | { kind: "move"; turn: number; player: PlayerIndex; unitId: string; type: UnitType; from: Point; to: Point; riders: string[] }
+  | {
+      kind: "move";
+      turn: number;
+      player: PlayerIndex;
+      unitId: string;
+      type: UnitType;
+      from: Point;
+      to: Point;
+      riders: string[];
+      /** Where each rider went, in the same order as riders. Missing in saves from the stage 2 test build. */
+      riderMoves?: RiderMove[];
+    }
   | { kind: "shot"; turn: number; player: PlayerIndex; shotId: number }
   | { kind: "melee"; turn: number; player: PlayerIndex; unitId: string; targetId: string; targetType: UnitType; damage: number; destroyed: boolean }
   | { kind: "spawn"; turn: number; player: PlayerIndex; unitId: string; at: Point }
@@ -134,6 +152,11 @@ export interface StrategicState {
   nextInfantry: [number, number];
   /** The id the next shot gets. */
   nextShot: number;
+  /**
+   * Both armies as they stood on the map before turn 1's automatic phase, so any moment can be
+   * rebuilt from the events. Missing in stage 2 saves: no replays and no tracks for those games.
+   */
+  start?: [Unit[], Unit[]];
 }
 
 /** A unit as the screens draw it: position, state and hit points, for either side. */
@@ -202,4 +225,45 @@ export interface StrategicView {
   /** True once a fort has fallen; winner is who destroyed it. */
   over: boolean;
   winner: PlayerIndex | null;
+}
+
+/** Something drawn on the replay map for one step. Points are fractional map squares. */
+export type ReplayMark =
+  /** Where a unit went: footprint centres, at least two points (an enemy's is cut to what the viewer could see). */
+  | { kind: "track"; owner: PlayerIndex; points: Point[] }
+  /** A shot's landing point; from is the shooter's footprint centre when the viewer could see the shooter, else null. */
+  | { kind: "shot"; shotId: number; weapon: Weapon; x: number; y: number; from: Point | null }
+  /** A fight: midway between the two footprint centres, or on the viewer's unit when the attacker was out of sight. */
+  | { kind: "clash"; at: Point }
+  /** The centre of a new infantry's square. */
+  | { kind: "spawn"; at: Point };
+
+/** One step of a replay: what happened, where to look, and the map just after it. */
+export interface ReplayStep {
+  /** "enemy": the opponent's turn as the viewer saw it. "own": the viewer's own automatic start of turn. "turn": one whole turn in a match replay. */
+  part: "enemy" | "own" | "turn";
+  /** One short line for the list, at most about 34 characters: "A shell destroyed your tank 1". */
+  text: string;
+  /** Where the camera should look, a map point. */
+  focus: Point;
+  /** The map just after this step, as the viewer may see it. */
+  frame: StrategicView;
+  marks: ReplayMark[];
+  /**
+   * Units that moved in this step (top-left squares), for the slide animation. An enemy unit's slide
+   * is cut like its track to what the viewer saw, so its ends may be fractional but never lie in the fog.
+   */
+  moves: { unitId: string; owner: PlayerIndex; from: Point; to: Point }[];
+  /** Match replay only: the Game.turn this step shows and who played it. */
+  turn?: number;
+  player?: PlayerIndex;
+}
+
+/** A replay: the map before it starts and the steps to play, in order. */
+export interface Replay {
+  /** The map before the first step. */
+  before: StrategicView;
+  steps: ReplayStep[];
+  /** True when the replay is worth opening: the enemy did something the viewer saw, or the viewer's infantry fought. */
+  open: boolean;
 }

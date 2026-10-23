@@ -1291,15 +1291,53 @@ body.large-text .strategic-note {
   font-size: 36px;
 }
 
-/* The results screen: the whole map above the match's numbers and the way to the next game. */
+/* The results screen: the whole map above the match's numbers and the ways on. */
 .strategic-reveal {
   padding: 4px 0 0;
+}
+
+/* The headline in the middle; the tracks legend at the right, in line with the paper's right edge
+   (a 40 x 20 map fitted to 744 x 300 is 600 wide, so it ends 160 px from the stage's edge). */
+.strategic-reveal .reveal-head {
+  position: relative;
 }
 
 .strategic-reveal .winner {
   font-size: 28px;
   margin: 0;
   line-height: 1.1;
+}
+
+/* With the legend, the headline keeps to the middle 320 px so even a 20-letter name never runs into it. */
+.strategic-reveal .with-legend .winner {
+  padding: 0 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strategic-reveal .reveal-legend {
+  position: absolute;
+  right: 160px;
+  bottom: 3px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.reveal-legend-line {
+  display: inline-block;
+  width: 16px;
+  margin-right: 3px;
+  vertical-align: middle;
+  border-top: 2px dotted var(--ink);
+}
+
+.reveal-legend-line.enemy {
+  margin-right: 6px;
+  border-top-color: var(--red);
 }
 
 .strategic-reveal .reveal-map {
@@ -1310,7 +1348,7 @@ body.large-text .strategic-note {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 28px;
+  gap: 20px;
   margin-top: 4px;
 }
 
@@ -1321,8 +1359,17 @@ body.large-text .strategic-note {
 
 .strategic-reveal .summary th,
 .strategic-reveal .summary td {
-  padding: 0 8px;
+  padding: 0 7px;
   line-height: 1.15;
+}
+
+/* A 20-letter name would push the buttons off the stage: it ends in an ellipsis instead. */
+.reveal-name {
+  display: block;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reveal-stats td:last-child,
@@ -1334,14 +1381,17 @@ body.large-text .strategic-note {
   font-weight: bold;
 }
 
+/* Four buttons in one row beside the table: Play again, Main menu, Save image, Watch the match. */
 .strategic-reveal .menu-buttons.row {
   margin: 0;
+  gap: 8px;
 }
 
 .strategic-reveal .btn {
   min-height: 42px;
   font-size: 20px;
-  padding: 4px 18px;
+  padding: 4px 14px;
+  white-space: nowrap;
 }
 
 /* Larger text on the turn panel: a step up where there is room, the orders list only a little so it never overflows. */
@@ -1371,4 +1421,8 @@ body.large-text .screen.strategic .panel-sub {
 
 body.large-text .strategic-reveal .summary {
   font-size: 16px;
+}
+
+body.large-text .strategic-reveal .reveal-legend {
+  font-size: 15px;
 }

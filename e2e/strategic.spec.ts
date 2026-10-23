@@ -1,7 +1,41 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { confirmHandoff, createGame, finishBuild, randomLayout, rectOf, type Game, type Unit } from "../src/rules/index.ts";
-import { HP, distanceToRect, footprintAt, isFree, mapOf, reachableFor, shakeRadius, squareDistance } from "../src/strategic/rules/index.ts";
-import { buildBothAndStart, centreOfUnit, mapPoint, savedGame, startNewGame, strategicGame, tapMap } from "./helpers.ts";
+import {
+  BASE_GRID,
+  HP,
+  aimProblem,
+  decodeExplored,
+  distanceToRect,
+  endStrategicTurn,
+  fireArtillery,
+  fireTank,
+  footprintAt,
+  isAlive,
+  isFree,
+  mapOf,
+  moveUnit,
+  reachableFor,
+  replayFor,
+  shakeRadius,
+  shotForViewer,
+  squareDistance,
+  tankTargets,
+  unitSeen,
+  unitTracks,
+  visibleSquares,
+} from "../src/strategic/rules/index.ts";
+import {
+  buildBothAndStart,
+  centreOfUnit,
+  continueSaved,
+  mapPoint,
+  savedGame,
+  startNewGame,
+  strategicGame,
+  tapMap,
+  turnOnLargeText,
+} from "./helpers.ts";
 
 /** The Medium map and the Strategic base, in squares (see src/strategic/rules). */
 const MAP = { w: 40, h: 20 };
@@ -83,21 +117,87 @@ function tooClosePoint(units: readonly Unit[], gun: Unit): { x: number; y: numbe
   throw new Error("no empty square near the artillery");
 }
 
-/**
- * A Strategic game on the brink of its end, built through the rules: both bases random, player 1 at
- * their first turn (the automatic phase already run), their tank 1 lifted beside the enemy fort,
- * which has one hit point left. One tank shot wins.
- */
-function craftedWin(): Game {
-  let g = createGame({ seed: 5, names: ["Ana", "Ben"], mode: "strategic" });
+/** Both bases built at random through the rules, and player 1's first turn begun (its automatic phase run). */
+function firstTurn(seed: number): Game {
+  let g = createGame({ seed, names: ["Ana", "Ben"], mode: "strategic" });
   g = randomLayout(g, 0);
   g = ok(finishBuild(g, 0));
   g = ok(confirmHandoff(g));
   g = randomLayout(g, 1);
   g = ok(finishBuild(g, 1));
-  g = ok(confirmHandoff(g));
+  return ok(confirmHandoff(g));
+}
+
+/** Ends the current player's turn and begins the other player's, as pressing Start on the black screen does. */
+const pass = (g: Game): Game => ok(confirmHandoff(ok(endStrategicTurn(g))));
+
+/** Moves one of the current player's units as far toward the enemy base as it can go this turn (it stays put if it cannot move). */
+function advance(g: Game, unitId: string): Game {
+  const s = g.strategic as NonNullable<Game["strategic"]>;
+  const base = s.bases[g.current === 0 ? 1 : 0];
+  const goal = { x: base.x + BASE_GRID.w / 2, y: base.y + BASE_GRID.h / 2 };
+  const unit = g.players[g.current].units.find((u) => u.id === unitId);
+  if (!unit || !isAlive(unit)) return g;
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Infinity;
+  for (const to of reachableFor(g, unitId)) {
+    const c = centreOfUnit({ ...unit, ...to });
+    const d = Math.hypot(c.x - goal.x, c.y - goal.y);
+    if (d < bestDistance) [best, bestDistance] = [to, d];
+  }
+  return best ? ok(moveUnit(g, unitId, best)) : g;
+}
+
+/** Ben's artillery puts a shell close to one of Ana's units, on ground she has explored, so her replay shows it. */
+function shellOnAnasGround(g: Game): Game {
+  const map = mapOf((g.strategic as NonNullable<Game["strategic"]>).map);
+  const explored = decodeExplored((g.strategic as NonNullable<Game["strategic"]>).explored[0], map);
+  for (const u of g.players[0].units.filter(isAlive)) {
+    const c = centreOfUnit(u);
+    for (const [dx, dy] of [[2, 0], [-2, 0], [0, 2], [0, -2]] as const) {
+      const aim = { x: c.x + dx, y: c.y + dy };
+      if (aimProblem(g, "artillery-1", aim)) continue;
+      const r = fireArtillery(g, "artillery-1", aim);
+      if (r.ok && shotForViewer(r.shot, 0, explored, map)) return r.game;
+    }
+  }
+  throw new Error("no shell landed where Ana could see it");
+}
+
+/**
+ * A game left on the black screen before Ana's turn, built through the rules (the replay rebuilds
+ * the past from the saved events). Each round both tanks 1 head for the other base, until Ben's
+ * comes into Ana's sight; on that turn it fires at one of her units in range, and his artillery
+ * puts a shell on ground she knows. Seed 13: her replay opens with Ben's tank coming out of the fog.
+ */
+function craftedHandover(): Game {
+  let g = firstTurn(13);
+  const map = mapOf((g.strategic as NonNullable<Game["strategic"]>).map);
+  for (let round = 0; round < 8; round++) {
+    g = advance(pass(advance(g, "tank-1")), "tank-1");
+    const tank = g.players[1].units.find((u) => u.id === "tank-1") as Unit;
+    if (!unitSeen(tank, visibleSquares(g.players[0].units.filter(isAlive), map), map)) {
+      g = pass(g);
+      continue;
+    }
+    const target = tankTargets(g, "tank-1")[0];
+    if (target) g = ok(fireTank(g, "tank-1", target));
+    return ok(endStrategicTurn(shellOnAnasGround(g)));
+  }
+  throw new Error("Ben's tank never came into Ana's sight");
+}
+
+/**
+ * A Strategic game on the brink of its end, built through the rules: both bases random, `rounds`
+ * quiet rounds played (Ana's tank 2 and Ben's tank 1 head for the other base, so the match has
+ * turns and tracks to show), then player 1 at the start of their turn with their tank 1 lifted
+ * beside the enemy fort, which has one hit point left. One tank shot wins.
+ */
+function craftedWin(rounds = 0): Game {
+  let g = firstTurn(5);
+  for (let i = 0; i < rounds; i++) g = pass(advance(pass(advance(g, "tank-2")), "tank-1"));
   const s = g.strategic;
-  if (!s) throw new Error("no Strategic state");
+  if (!s?.start) throw new Error("no Strategic state");
   const map = mapOf(s.map);
   const fort = g.players[1].units.find((u) => u.type === "fort") as Unit;
   const tank = g.players[0].units.find((u) => u.id === "tank-1") as Unit;
@@ -114,8 +214,30 @@ function craftedWin(): Game {
   tank.x = spot.x;
   tank.y = spot.y;
   fort.hits = HP.fort - 1;
+  // The same edits in the starting armies, so the replays' rebuilt past agrees with the saved units
+  // (tank 1 never moved and nothing hit the fort, so no event undoes them).
+  Object.assign(s.start[0].find((u) => u.id === "tank-1") as Unit, spot);
+  (s.start[1].find((u) => u.type === "fort") as Unit).hits = HP.fort - 1;
   s.autoDoneTurn = g.turn;
   return g;
+}
+
+/** Opens a crafted save on Ana's turn, plays through her replay if one opens, and fells the enemy fort with tank 1. */
+async function winWithTank1(page: Page, crafted: Game): Promise<void> {
+  await continueSaved(page, crafted);
+  await page.getByTestId("start").click();
+  if (replayFor(crafted).open) {
+    await expect(page.getByTestId("strategic-replay")).toBeVisible();
+    await page.getByTestId("replay-done").click();
+  }
+  await expect(page.getByTestId("shooter")).toHaveText("Ana");
+  await page.getByTestId("order-tank-1").click();
+  const fort = crafted.players[1].units.find((u) => u.type === "fort") as Unit;
+  const fc = centreOfUnit(fort);
+  await tapMap(page, fc.x, fc.y);
+  await expect(page.getByTestId("banner")).toContainText("You win");
+  await page.getByTestId("see-results").click();
+  await expect(page.getByTestId("strategic-reveal")).toBeVisible();
 }
 
 test("a Strategic game: build both bases, land on the map in fog, and take turns passing the phone", async ({ page }) => {
@@ -142,11 +264,14 @@ test("a Strategic game: build both bases, land on the map in fog, and take turns
   }
   expect(s.explored[0].length).toBe(Math.ceil((MAP.w * MAP.h) / 4));
 
+  // The first turns go straight to the turn screen: there is nothing yet to replay.
   await page.getByTestId("start").click();
   await expect(page.getByTestId("strategic-map")).toBeVisible();
   await expect(page.getByTestId("minimap")).toBeVisible();
   await expect(page.getByTestId("shooter")).toHaveText("Ana");
   await expect(page.getByTestId("turn")).toHaveText("Turn 1");
+  await expect(page.locator("body")).toHaveAttribute("data-screen", "strategic");
+  await expect(page.getByTestId("strategic-replay")).toHaveCount(0);
   const explored = await percentOf(page);
   expect(explored).toBeGreaterThan(0);
   expect(explored).toBeLessThan(100);
@@ -163,13 +288,16 @@ test("a Strategic game: build both bases, land on the map in fog, and take turns
   await expect(page.getByTestId("shooter")).toHaveText("Ben");
   await expect(page.getByTestId("turn")).toHaveText("Turn 1");
   await expect(page.getByTestId("strategic-map")).toBeVisible();
+  await expect(page.getByTestId("strategic-replay")).toHaveCount(0);
 
-  // And back to player 1 for their second turn.
+  // And back to player 1 for their second turn. Ben's units stayed out of her sight and her own
+  // infantry only marched, which never opens a replay, so her turn screen comes up at once.
   await page.getByTestId("end-turn").click();
   await expect(page.getByTestId("handoff")).toContainText("Pass to Ana");
   await page.getByTestId("start").click();
   await expect(page.getByTestId("shooter")).toHaveText("Ana");
   await expect(page.getByTestId("turn")).toHaveText("Turn 2");
+  await expect(page.getByTestId("strategic-replay")).toHaveCount(0);
   expect((await savedGame(page)).turn).toBe(3);
 });
 
@@ -372,6 +500,185 @@ test("win and reveal: a tank shot fells the enemy fort, the banner says so, and 
   const stage = (await page.locator("#stage").boundingBox())!;
   for (const id of ["play-again", "main-menu", "reveal-stats"]) {
     const box = (await page.getByTestId(id).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 0.5);
+  }
+});
+
+test("handover replay: Start shows what Ana's units saw of Ben's turn, and Start my turn opens her turn for good", async ({ page }) => {
+  const crafted = craftedHandover();
+  // What the rules will show once Start has run Ana's automatic phase, as the app does.
+  const replay = replayFor(ok(confirmHandoff(crafted)));
+  const texts = replay.steps.map((st) => st.text);
+  const firstOwn = replay.steps.findIndex((st) => st.part === "own");
+  const lineStep = replay.steps.findIndex((st) => st.marks.some((m) => m.kind === "shot" && m.from !== null));
+  expect(replay.open).toBe(true);
+  expect(replay.steps[0]!.part).toBe("enemy");
+  expect(replay.steps[0]!.marks.some((m) => m.kind === "track")).toBe(true);
+  expect(texts.some((t) => t.includes("shell"))).toBe(true);
+  expect(lineStep).toBeGreaterThan(0);
+  expect(firstOwn).toBeGreaterThan(lineStep);
+
+  await continueSaved(page, crafted);
+  await expect(page.getByTestId("handoff")).toContainText("Pass to Ana");
+  await page.getByTestId("start").click();
+
+  const screen = page.getByTestId("strategic-replay");
+  await expect(screen).toBeVisible();
+  await expect(screen).toHaveAttribute("data-mode", "handover");
+  await expect(page.locator("body")).toHaveAttribute("data-screen", "strategic-replay");
+  const steps = page.locator("[data-testid^=replay-step-]");
+  await expect(steps).toHaveCount(texts.length);
+  await expect(steps).toContainText(texts);
+  await expect(page.getByTestId("replay-divider")).toHaveText("Start of your turn");
+  await expect(page.getByTestId("replay-done")).toHaveText("Start my turn");
+
+  // It plays by itself: the counter moves on without a tap.
+  const counter = page.getByTestId("replay-counter");
+  await expect(counter).toHaveText(new RegExp(`^Step \\d of ${texts.length}$`));
+  const first = (await screen.getAttribute("data-step")) as string;
+  await expect(screen).not.toHaveAttribute("data-step", first);
+  expect(Number(await screen.getAttribute("data-step"))).toBeGreaterThan(Number(first));
+
+  // Tapping step 1 shows it and pauses there: Ben's tank coming out of the fog, its track drawn.
+  await page.getByTestId("replay-step-1").click();
+  await expect(screen).toHaveAttribute("data-playing", "false");
+  await expect(page.getByTestId("replay-step-1")).toHaveAttribute("aria-current", "step");
+  await expect(counter).toHaveText(`Step 1 of ${texts.length}`);
+  await expect(page.getByTestId("replay-chip")).toHaveText("Ben's turn");
+  await expect(page.locator(".strategic-replay-track")).not.toHaveCount(0);
+
+  // The tank's shot at Ana's unit, with a line from the tank she could see.
+  await page.getByTestId(`replay-step-${lineStep + 1}`).click();
+  await expect(page.locator(".strategic-replay-shot[data-from=seen] .strategic-replay-shot-line")).toHaveCount(1);
+
+  // Her own start of turn comes after the divider; the Menu opening and closing keeps the step.
+  await page.getByTestId(`replay-step-${firstOwn + 1}`).click();
+  await expect(page.getByTestId("replay-chip")).toHaveText("Start of your turn");
+  await page.getByTestId("menu-open").click();
+  await expect(page.getByTestId("menu-overlay")).toBeVisible();
+  await page.getByTestId("menu-resume").click();
+  await expect(page.getByTestId(`replay-step-${firstOwn + 1}`)).toHaveAttribute("aria-current", "step");
+  await expect(screen).toHaveAttribute("data-playing", "false");
+
+  // Start my turn: the turn screen, and a re-render does not bring the replay back.
+  await page.getByTestId("replay-done").click();
+  await expect(page.getByTestId("shooter")).toHaveText("Ana");
+  await expect(page.locator("body")).toHaveAttribute("data-screen", "strategic");
+  await expect(screen).toHaveCount(0);
+  await page.getByTestId("menu-open").click();
+  await page.getByTestId("menu-resume").click();
+  await expect(page.getByTestId("shooter")).toHaveText("Ana");
+  await expect(screen).toHaveCount(0);
+
+  // A reload shows the replay again until she gives her first order; after that the turn opens straight away.
+  await page.reload();
+  await page.getByTestId("continue").click();
+  await page.getByTestId("start").click();
+  await expect(screen).toBeVisible();
+  await page.getByTestId("replay-done").click();
+  const atTurn = await savedGame(page);
+  const to = reachableFor(atTurn, "tank-2").at(-1);
+  if (!to) throw new Error("tank 2 has nowhere to go");
+  await page.getByTestId("order-tank-2").click();
+  await tapMap(page, to.x + 1, to.y + 1);
+  await expect(page.getByTestId("order-tank-2")).toContainText("Moved");
+  await page.reload();
+  await page.getByTestId("continue").click();
+  await page.getByTestId("start").click();
+  await expect(page.getByTestId("shooter")).toHaveText("Ana");
+  await expect(screen).toHaveCount(0);
+});
+
+test("results: every unit's track on the revealed map, a Hits column, Save image and Watch the match", async ({ page }) => {
+  const crafted = craftedWin(3);
+  await winWithTank1(page, crafted);
+
+  // The dotted tracks of every unit that moved, with the legend.
+  await expect(page.locator(".strategic-reveal path.strategic-track")).toHaveCount(unitTracks(crafted).length);
+  await expect(page.getByTestId("reveal-legend")).toContainText("where units went");
+
+  // Hits between Shots and Explored: Ana's one shot hurt the fort, Ben never fired.
+  await expect(page.locator("[data-testid=reveal-stats] th")).toHaveText(["", "Turns", "Lost", "Shots", "Hits", "Explored"]);
+  await expect(page.locator("[data-testid=reveal-0] td").nth(3)).toHaveText("1");
+  await expect(page.locator("[data-testid=reveal-0] td").nth(4)).toHaveText("1");
+  await expect(page.locator("[data-testid=reveal-1] td").nth(4)).toHaveText("0");
+
+  // Save image: this browser cannot share files, so the picture downloads.
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("save-image").click()]);
+  expect(download.suggestedFilename()).toBe("pencil-army-base-strategic.png");
+  const png = await readFile((await download.path()) as string);
+  expect(png.subarray(1, 4).toString()).toBe("PNG");
+  expect(png.length).toBeGreaterThan(20_000);
+
+  // Everything fits the stage, the four buttons included.
+  const stage = (await page.locator("#stage").boundingBox())!;
+  for (const id of ["play-again", "main-menu", "save-image", "watch-match", "reveal-stats"]) {
+    const box = (await page.getByTestId(id).boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 0.5);
+    expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 0.5);
+  }
+
+  // Watch the match: one step per turn, played by itself with the fog lifted, stopping on the last.
+  const turns = crafted.turn;
+  await page.getByTestId("watch-match").click();
+  const screen = page.getByTestId("strategic-replay");
+  await expect(screen).toHaveAttribute("data-mode", "match");
+  await expect(page.locator("body")).toHaveAttribute("data-screen", "strategic-replay");
+  await expect(page.locator("[data-testid^=replay-step-]")).toHaveCount(turns);
+  await expect(page.getByTestId("replay-step-1")).toHaveText("Turn 1 · Ana");
+  await expect(page.getByTestId("replay-step-2")).toHaveText("Turn 1 · Ben");
+  await expect(page.locator(".strategic-replay .strategic-enemies [data-unit]")).not.toHaveCount(0);
+  // The counter counts steps, so it never clashes with the chip's per-player turn number.
+  await expect(page.getByTestId("replay-counter")).toHaveText(`Step ${turns} of ${turns}`, { timeout: 15_000 });
+  await expect(screen).toHaveAttribute("data-playing", "false");
+  await expect(page.getByTestId("replay-chip")).toHaveText(`Turn ${(turns + 1) / 2} · Ana`);
+
+  // Back to results.
+  await expect(page.getByTestId("replay-done")).toHaveText("Back to results");
+  await page.getByTestId("replay-done").click();
+  await expect(page.getByTestId("strategic-reveal")).toBeVisible();
+  await expect(page.locator("body")).toHaveAttribute("data-screen", "over");
+
+  // Watching again starts from the first turn.
+  await page.getByTestId("watch-match").click();
+  await expect(page.getByTestId("replay-step-1")).toHaveAttribute("aria-current", "step");
+  await page.getByTestId("replay-done").click();
+  await expect(page.getByTestId("strategic-reveal")).toBeVisible();
+});
+
+test("larger text still fits the replay panel", async ({ page }) => {
+  await turnOnLargeText(page);
+  await continueSaved(page, craftedHandover());
+  await page.getByTestId("start").click();
+  const screen = page.getByTestId("strategic-replay");
+  await expect(screen).toBeVisible();
+  await expect(page.locator("body")).toHaveClass(/large-text/);
+  expect(await panelFits(page)).toBeLessThanOrEqual(0);
+
+  // No line is cut short: the step texts wrap, and the chip, counter and buttons hold their words.
+  const clipped = await page.evaluate(() =>
+    [...document.querySelectorAll(".replay-step, .replay-chip, .replay-counter, .replay-title, [data-testid=replay-done], [data-testid=menu-open]")]
+      .filter((e) => e.scrollWidth > e.clientWidth + 1)
+      .map((e) => e.textContent),
+  );
+  expect(clipped).toEqual([]);
+
+  // The list scrolls inside its own box: the last step, once picked, shows inside it.
+  const count = await page.locator("[data-testid^=replay-step-]").count();
+  const last = page.getByTestId(`replay-step-${count}`);
+  await last.click();
+  await expect(last).toHaveAttribute("aria-current", "step");
+  const list = (await page.getByTestId("replay-list").boundingBox())!;
+  const item = (await last.boundingBox())!;
+  expect(item.y).toBeGreaterThanOrEqual(list.y - 0.5);
+  expect(item.y + item.height).toBeLessThanOrEqual(list.y + list.height + 0.5);
+  expect(await panelFits(page)).toBeLessThanOrEqual(0);
+
+  // Every control stays inside the stage.
+  const stage = (await page.locator("#stage").boundingBox())!;
+  for (const id of ["replay-done", "menu-open", "replay-play", "replay-counter"]) {
+    const box = (await page.getByTestId(id).boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 0.5);
     expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 0.5);
   }
 });

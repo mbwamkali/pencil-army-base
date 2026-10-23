@@ -29,6 +29,8 @@ import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, isStrategic, m
 import { placementProblem, snapWall, turnWall, type Candidate } from "../rules/placement.ts";
 import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
+import { matchReplay, replayFor } from "../strategic/rules/index.ts";
+import { forgetReplay, strategicReplayScreen } from "../strategic/ui/replayScreen.ts";
 import { strategicRevealScreen } from "../strategic/ui/reveal.ts";
 import { strategicScreen } from "../strategic/ui/screen.ts";
 import { UNIT_LABEL, unitArt } from "./art.ts";
@@ -86,6 +88,13 @@ interface Ui {
   resultPopup: boolean;
   /** This turn's shot was the first one a wall blocked on this device, so the wall tip is showing. */
   wallTip: boolean;
+  /**
+   * Strategic handover replays already watched to the end on this device, keyed `${seed}:${turn}`, so
+   * Start my turn is final. Not saved: a reload shows the replay again until the first order is given.
+   */
+  replaysDone: Set<string>;
+  /** Strategic results screen: Watch the match is playing the whole game back. */
+  watching: boolean;
 }
 
 const MODE_KEY = "pencil-army-base:mode";
@@ -111,6 +120,8 @@ const ui: Ui = {
   placing: null,
   resultPopup: false,
   wallTip: false,
+  replaysDone: new Set(),
+  watching: false,
 };
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
@@ -171,8 +182,34 @@ export function render(): void {
     screenName = "build";
     node = buildScreen(game);
   } else if (isStrategic(modeOf(game.mode))) {
-    // Strategic has its own turn screen, which stays up (read-only) after the winning shot until See results.
-    if (game.phase === "turn" || !ui.endShown) {
+    const replayKey = `${game.seed}:${game.turn}`;
+    const handover = game.phase === "turn" && !ui.replaysDone.has(replayKey) ? replayFor(game) : null;
+    if (game.phase === "over" && ui.endShown && ui.watching) {
+      // Watch the match: the whole game again with the fog lifted, then back to the results.
+      screenName = "strategic-replay";
+      node = strategicReplayScreen(game, matchReplay(game), {
+        mode: "match",
+        menuButton,
+        overlay: () => null,
+        done: () => {
+          ui.watching = false;
+          render();
+        },
+      });
+    } else if (handover?.open) {
+      // Before their turn the player sees what their units saw of the enemy's turn (decision 15).
+      screenName = "strategic-replay";
+      node = strategicReplayScreen(game, handover, {
+        mode: "handover",
+        menuButton,
+        overlay: () => (ui.menu !== "closed" ? menuOverlay() : null),
+        done: () => {
+          ui.replaysDone.add(replayKey);
+          render();
+        },
+      });
+    } else if (game.phase === "turn" || !ui.endShown) {
+      // Strategic has its own turn screen, which stays up (read-only) after the winning shot until See results.
       screenName = "strategic";
       node = strategicScreen(game, {
         menuButton,
@@ -187,7 +224,16 @@ export function render(): void {
       });
     } else {
       screenName = "over";
-      node = strategicRevealScreen(game, { playAgain: () => playAgain(game), mainMenu: toMainMenu });
+      node = strategicRevealScreen(game, {
+        playAgain: () => playAgain(game),
+        mainMenu: toMainMenu,
+        watchMatch: () => {
+          // Watch the match always starts from turn 1, however the last viewing was left.
+          forgetReplay();
+          ui.watching = true;
+          render();
+        },
+      });
     }
   } else if (game.phase === "turn" && game.ai !== undefined && game.current === game.ai) {
     screenName = "computer-turn";
@@ -214,6 +260,10 @@ export function goBack(): boolean {
     ui.screen = ui.screen === "setup" ? "opponent" : "menu";
   } else if (ui.menu !== "closed") {
     ui.menu = "closed";
+  } else if (ui.watching) {
+    // Back from Watch the match goes to the results screen it came from, and stops the replay's clock.
+    ui.watching = false;
+    forgetReplay();
   } else if (document.body.dataset.screen === "handoff") {
     return true;
   } else if (document.body.dataset.screen === "over") {
@@ -283,6 +333,7 @@ function resume(game: Game): void {
   ui.screen = "game";
   ui.turnKey = "";
   ui.endShown = false;
+  ui.watching = false;
   ui.placing = null;
   ui.resultPopup = game.ai !== undefined;
   // Single player has nothing to hide from the other side of the table, so no Start screen.
@@ -444,6 +495,9 @@ function startGame(): void {
   ui.screen = "game";
   ui.turnKey = "";
   ui.endShown = false;
+  ui.watching = false;
+  // A new game may share its seed with the last one (a ?seed= link), so its replays start unwatched.
+  ui.replaysDone.clear();
   ui.gate = null;
   ui.view = "mine";
   ui.aim = null;
@@ -1147,6 +1201,7 @@ function playAgain(game: Game): void {
 function toMainMenu(): void {
   clearGame();
   ui.game = null;
+  ui.watching = false;
   ui.screen = "menu";
   render();
 }

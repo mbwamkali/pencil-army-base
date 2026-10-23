@@ -9,9 +9,12 @@ import {
   cameraHolding,
   centreCamera,
   clampCamera,
+  easeInOut,
   fitCamera,
   fitScale,
+  inViewport,
   isWholeCamera,
+  lerpCamera,
   panCamera,
   pinchCamera,
   toMap,
@@ -349,5 +352,117 @@ describe("isWholeCamera", () => {
     expect(isWholeCamera({ cx: 20, cy: 10, scale: FIT * 1.009 }, map, W, H)).toBe(true);
     expect(isWholeCamera({ cx: 20, cy: 10, scale: FIT * 1.02 }, map, W, H)).toBe(false);
     expect(isWholeCamera(baseCamera(map, { x: 2, y: 7 }, W, H), map, W, H)).toBe(false);
+  });
+});
+
+describe("inViewport", () => {
+  const c: Camera = { cx: 20, cy: 10, scale: SQ_NEAR };
+  // 744 / 38 = 19.58 squares wide, 412 / 38 = 10.84 tall, centred on (20, 10).
+  const r = viewportRect(c, W, H);
+
+  it("is true in the middle 70% of the view and false in the outer 15% on each side", () => {
+    expect(inViewport(c, { x: 20, y: 10 }, W, H)).toBe(true);
+    expect(inViewport(c, { x: r.x + 0.16 * r.w, y: r.y + 0.84 * r.h }, W, H)).toBe(true);
+    expect(inViewport(c, { x: r.x + 0.14 * r.w, y: 10 }, W, H)).toBe(false);
+    expect(inViewport(c, { x: r.x + 0.86 * r.w, y: 10 }, W, H)).toBe(false);
+    expect(inViewport(c, { x: 20, y: r.y + 0.1 * r.h }, W, H)).toBe(false);
+    expect(inViewport(c, { x: 20, y: r.y + 0.9 * r.h }, W, H)).toBe(false);
+  });
+
+  it("is false outside the view altogether, and the margin can be changed", () => {
+    expect(inViewport(c, { x: 2, y: 10 }, W, H)).toBe(false);
+    expect(inViewport(c, { x: r.x + 0.05 * r.w, y: 10 }, W, H, 0)).toBe(true);
+    expect(inViewport(c, { x: r.x + 0.3 * r.w, y: 10 }, W, H, 0.35)).toBe(false);
+  });
+
+  it("follows the zoom: what is near the edge zoomed in is well inside the whole map", () => {
+    const p = { x: r.x + 0.05 * r.w, y: 10 };
+    expect(inViewport(c, p, W, H)).toBe(false);
+    expect(inViewport(fitCamera(map, W, H), p, W, H)).toBe(true);
+  });
+});
+
+describe("easeInOut", () => {
+  it("starts at 0, ends at 1, passes the middle at one half and never overshoots", () => {
+    expect(easeInOut(0)).toBe(0);
+    expect(easeInOut(1)).toBe(1);
+    expect(easeInOut(0.5)).toBeCloseTo(0.5, 9);
+    let last = 0;
+    for (let t = 0; t <= 1.0001; t += 0.05) {
+      const v = easeInOut(t);
+      expect(v).toBeGreaterThanOrEqual(last - 1e-12);
+      expect(v).toBeLessThanOrEqual(1);
+      last = v;
+    }
+  });
+
+  it("starts and stops gently, and clamps times outside 0..1", () => {
+    expect(easeInOut(0.1)).toBeLessThan(0.1);
+    expect(easeInOut(0.9)).toBeGreaterThan(0.9);
+    expect(easeInOut(-1)).toBe(0);
+    expect(easeInOut(2)).toBe(1);
+  });
+});
+
+describe("lerpCamera", () => {
+  it("moves centre and scale the given fraction of the way", () => {
+    const a: Camera = { cx: 10, cy: 5, scale: 20 };
+    const b: Camera = { cx: 30, cy: 15, scale: 40 };
+    expect(lerpCamera(a, b, 0)).toEqual(a);
+    expect(lerpCamera(a, b, 1)).toEqual(b);
+    expect(lerpCamera(a, b, 0.25)).toEqual({ cx: 15, cy: 7.5, scale: 25 });
+  });
+});
+
+describe("a bottom cover (the replay's controls pill)", () => {
+  const COVER = 64;
+  /** Where the map's top and bottom edges land on screen, in stage px. */
+  const mapEdges = (c: Camera) => ({ top: toScreen(c, { x: 0, y: 0 }, W, H).y, bottom: toScreen(c, { x: 0, y: map.h }, W, H).y });
+
+  it("changes nothing when it is 0", () => {
+    const c: Camera = { cx: 3, cy: 19, scale: SQ_NEAR };
+    expect(clampCamera(c, map, W, H, 0)).toEqual(clampCamera(c, map, W, H));
+    expect(fitCamera(map, W, H, 0)).toEqual(fitCamera(map, W, H));
+    expect(baseCamera(map, { x: 2, y: 7 }, W, H, 0)).toEqual(baseCamera(map, { x: 2, y: 7 }, W, H));
+  });
+
+  it("fits the whole map above the cover, centred across, with no gap at the top", () => {
+    const c = fitCamera(map, W, H, COVER);
+    // (412 - 64) / 20 = 17.4 is now tighter than 744 / 40 = 18.6.
+    expect(c.scale).toBeCloseTo((H - COVER) / map.h, 9);
+    expect(mapEdges(c).top).toBeCloseTo(0, 9);
+    expect(mapEdges(c).bottom).toBeCloseTo(H - COVER, 9);
+    expect(toScreen(c, { x: map.w / 2, y: 0 }, W, H).x).toBeCloseTo(W / 2, 9);
+    expect(clampCamera(c, map, W, H, COVER)).toEqual(c);
+    expect(isWholeCamera(c, map, W, H, COVER)).toBe(true);
+    // The clamp would not zoom out to it without the cover: the map is never smaller than the view needs.
+    expect(clampCamera(c, map, W, H).scale).toBeCloseTo(FIT, 9);
+  });
+
+  it("lets the map rise until its last row sits just above the cover, at any zoom, and no further", () => {
+    for (const scale of [fitScale(map, W, H, COVER), FIT, 25, SQ_NEAR, SCALE_MAX]) {
+      const low = mapEdges(clampCamera({ cx: 20, cy: 99, scale }, map, W, H, COVER));
+      expect(low.bottom).toBeCloseTo(H - COVER, 6);
+      expect(low.top).toBeLessThanOrEqual(1e-6);
+      const high = mapEdges(clampCamera({ cx: 20, cy: -99, scale }, map, W, H, COVER));
+      expect(high.top).toBeCloseTo(0, 6);
+    }
+  });
+
+  it("holds for a drag, a pinch, a zoom and a centring alike", () => {
+    const c = baseCamera(map, { x: 26, y: 7 }, W, H, COVER);
+    expect(mapEdges(panCamera(c, { x: 0, y: -2000 }, map, W, H, COVER)).bottom).toBeCloseTo(H - COVER, 6);
+    expect(mapEdges(centreCamera(c, { x: 20, y: 30 }, map, W, H, COVER)).bottom).toBeCloseTo(H - COVER, 6);
+    expect(mapEdges(zoomAbout(c, { x: 20, y: 19.9 }, 1.2, map, W, H, COVER)).bottom).toBeGreaterThanOrEqual(H - COVER - 1e-6);
+    const pinched = pinchCamera(c, { mid: { x: 300, y: 400 }, dist: 100 }, { mid: { x: 300, y: -400 }, dist: 100 }, map, W, H, COVER);
+    expect(mapEdges(pinched).bottom).toBeCloseTo(H - COVER, 6);
+    // Without the cover the same drag stops with the map's bottom at the view's bottom.
+    expect(mapEdges(panCamera(c, { x: 0, y: -2000 }, map, W, H)).bottom).toBeCloseTo(H, 6);
+  });
+
+  it("centres the base in the part above the cover", () => {
+    const c = baseCamera(map, { x: 2, y: 7 }, W, H, COVER);
+    expect(c.scale).toBe(SQ_NEAR);
+    expect(toScreen(c, { x: 8, y: 10 }, W, H).y).toBeCloseTo((H - COVER) / 2, 9);
   });
 });

@@ -6,6 +6,7 @@ export * from "./fog.ts";
 export * from "./maps.ts";
 export * from "./migrate.ts";
 export * from "./orders.ts";
+export * from "./replay.ts";
 export * from "./setup.ts";
 export * from "./turn.ts";
 export * from "./types.ts";

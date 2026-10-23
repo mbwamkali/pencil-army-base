@@ -118,7 +118,7 @@ describe("moveUnit", () => {
     expect([tank.x, tank.y]).toEqual([7, 9]);
     expect(r.strategic!.orders).toEqual({ "tank-1": { moved: true, fired: false } });
     expect(r.strategic!.events).toEqual([
-      { kind: "move", turn: 1, player: 0, unitId: "tank-1", type: "tank", from: { x: 4, y: 8 }, to: { x: 7, y: 9 }, riders: [] },
+      { kind: "move", turn: 1, player: 0, unitId: "tank-1", type: "tank", from: { x: 4, y: 8 }, to: { x: 7, y: 9 }, riders: [], riderMoves: [] },
     ]);
     const after = decodeExplored(r.strategic!.explored[0], medium);
     expect(after.size).toBeGreaterThan(before.size);

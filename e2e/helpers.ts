@@ -68,6 +68,28 @@ export async function strategicGame(page: Page, seed: number, names: [string, st
   return before;
 }
 
+/**
+ * Puts a game built in the test into the browser's save slot and opens it with Continue, as a player
+ * coming back to the phone would. Build it through the rules: the Strategic replays rebuild the past
+ * from the saved events, so a unit moved by hand in the JSON would be out of step with them.
+ */
+export async function continueSaved(page: Page, game: Game): Promise<void> {
+  await page.goto("/");
+  await page.evaluate((g) => localStorage.setItem("pencil-army-base:game", JSON.stringify(g)), game);
+  await page.reload();
+  await page.getByTestId("continue").click();
+}
+
+/** Turns on Larger text on the Accessibility screen and goes back to the main menu; the setting stays on this browser. */
+export async function turnOnLargeText(page: Page): Promise<void> {
+  await page.goto("/");
+  await page.getByTestId("accessibility").click();
+  await page.getByTestId("access-largeText").click();
+  await expect(page.getByTestId("access-largeText")).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByTestId("menu")).toBeVisible();
+}
+
 /** World units per map square in the Strategic map's SVG (SQ_NEAR in src/strategic/ui/camera.ts). */
 const MAP_UNIT = 38;
 

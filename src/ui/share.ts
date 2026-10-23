@@ -162,7 +162,15 @@ export async function saveBattlefieldImage(game: Game): Promise<void> {
   const canvas = await renderBattlefield(game);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) return;
-  const file = new File([blob], "pencil-army-base-battlefield.png", { type: "image/png" });
+  await offerImage(blob, "pencil-army-base-battlefield.png");
+}
+
+/**
+ * Hands a finished PNG to the player: the app's share sheet, the browser's where it can share files,
+ * else a download named `fileName`. Shared by every Save image button so they all behave the same.
+ */
+export async function offerImage(blob: Blob, fileName: string): Promise<void> {
+  const file = new File([blob], fileName, { type: "image/png" });
   if (isApp) {
     await shareImage(blob, file.name, "Pencil Army Base");
     return;
