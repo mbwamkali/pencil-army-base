@@ -94,7 +94,8 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
   {
     heading: "Strategic (test build)",
     body: [
-      "A try-out of a bigger game, for two players on one phone. Each of you builds a small base as usual, then both bases are dropped onto a big paper map hidden by fog of war. You only see the ground near your own units; the rest stays blank until you explore it. Find the enemy base. Drag to pan and pinch to zoom, tap Whole map to see the whole sheet, and tap the mini-map in the corner to jump. End turn passes the phone. Orders and shooting come in a later build.",
+      "A try-out of a bigger game, for two players on one phone. Both bases are dropped onto a big paper map hidden by fog of war: you only see the ground near your own units, so explore to find the enemy. Drag to pan, pinch to zoom, and tap Whole map or the mini-map to get around. On your turn, tap a tank, your artillery or the truck to give it orders. A tank can move up to 3 squares and then fire at an enemy it can see within 2 squares. Artillery stays put and lobs a shell anywhere at least 3 squares away; the shell drifts, a little at short range and a lot across the map (the dashed circle around your aim shows how far), and you only see what it hit if that ground is in sight. The truck moves 5 squares and carries up to 4 infantry standing next to it; infantry beside your truck wait for the lift instead of marching off.",
+      "Infantry act on their own at the start of your turn: they attack anything next to them, close in on enemies they can see, and otherwise march toward the enemy half. From your second turn, your fort sends out one new infantry a turn. Units take hits: a fort stands 6 damage, a tank 3, artillery and the truck 2, infantry and walls 1. A shell does 3, a tank shot 2 and infantry 1, and a shell that touches a wall is spent on the wall. Destroy the enemy fort to win. End turn passes the phone.",
     ],
   },
   {

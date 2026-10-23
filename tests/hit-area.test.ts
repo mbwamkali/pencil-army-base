@@ -64,7 +64,11 @@ function drawnRect(u: Unit, art: Rect, mirror: boolean): Rect {
 
 const unit = (type: UnitType, upright = false): Unit => ({ id: `${type}-1`, type, x: 5, y: 3, upright, hits: 0 });
 
-/** Every unit drawing a shot can hit: fighting units fresh, the fort also damaged, walls flat and upright. */
+/**
+ * Every unit drawing a shot can hit: fighting units fresh, the fort also damaged, walls flat and
+ * upright, and the Strategic truck fresh and destroyed. The destroyed truck is measured on a fresh
+ * unit (a destroyed one takes no hits) so its red cross is known to stay inside the hit area too.
+ */
 const CASES: { label: string; u: Unit; art: string }[] = [
   { label: "fort", u: unit("fort"), art: "fort" },
   { label: "damaged fort", u: { ...unit("fort"), hits: 1 }, art: "fort-damaged" },
@@ -73,6 +77,8 @@ const CASES: { label: string; u: Unit; art: string }[] = [
   { label: "infantry", u: unit("infantry"), art: "infantry" },
   { label: "wall", u: unit("wall"), art: "wall" },
   { label: "upright wall", u: unit("wall", true), art: "wall" },
+  { label: "truck", u: unit("truck"), art: "truck" },
+  { label: "destroyed truck", u: unit("truck"), art: "truck-destroyed" },
 ];
 
 describe("shot drawing", () => {

@@ -68,6 +68,12 @@ export interface ShotHitRecord {
   type: UnitType;
   damage: number;
   destroyed: boolean;
+  /**
+   * True when the shooter could vouch for this hit as the shot fell: their own units always, an
+   * enemy only when one of their units had it in sight. A shell reveals nothing, so the shooter's
+   * view of their own shot keeps only these hits (the victim sees every hit on their own units).
+   */
+  seen: boolean;
 }
 
 /** A shot fired on the map: where it was aimed, where it landed and what it did. */
@@ -80,7 +86,7 @@ export interface MapShot {
   unitId: string;
   /** Where the player aimed, in fractional map squares. */
   aim: Point;
-  /** Where it landed, in fractional map squares (a shell drifts up to SHAKE_RADIUS from the aim). */
+  /** Where it landed, in fractional map squares (a shell drifts from the aim by up to shakeRadius of its range). */
   x: number;
   y: number;
   turn: number;

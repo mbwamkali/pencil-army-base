@@ -29,6 +29,7 @@ import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, isStrategic, m
 import { placementProblem, snapWall, turnWall, type Candidate } from "../rules/placement.ts";
 import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
+import { strategicRevealScreen } from "../strategic/ui/reveal.ts";
 import { strategicScreen } from "../strategic/ui/screen.ts";
 import { UNIT_LABEL, unitArt } from "./art.ts";
 import {
@@ -170,9 +171,24 @@ export function render(): void {
     screenName = "build";
     node = buildScreen(game);
   } else if (isStrategic(modeOf(game.mode))) {
-    // Strategic has its own turn screen. It cannot end yet, but a finished game still gets the summary rather than a crash.
-    screenName = game.phase === "turn" ? "strategic" : "over";
-    node = game.phase === "turn" ? strategicScreen(game, { menuButton, setGame, overlay: () => (ui.menu !== "closed" ? menuOverlay() : null) }) : gameOverScreen(game);
+    // Strategic has its own turn screen, which stays up (read-only) after the winning shot until See results.
+    if (game.phase === "turn" || !ui.endShown) {
+      screenName = "strategic";
+      node = strategicScreen(game, {
+        menuButton,
+        setGame,
+        render,
+        overlay: () => (ui.menu !== "closed" ? menuOverlay() : null),
+        showResults: () => {
+          ui.endShown = true;
+          render();
+        },
+        problemTip: (reason) => PROBLEM_TIP[reason],
+      });
+    } else {
+      screenName = "over";
+      node = strategicRevealScreen(game, { playAgain: () => playAgain(game), mainMenu: toMainMenu });
+    }
   } else if (game.phase === "turn" && game.ai !== undefined && game.current === game.ai) {
     screenName = "computer-turn";
     node = computerTurnScreen(game);
@@ -536,6 +552,11 @@ const PROBLEM_TIP: Record<Failure, string> = {
   army_incomplete: "",
   shot_already_fired: "",
   shot_not_fired: "",
+  already_moved: "That unit has already moved this turn.",
+  already_fired: "That unit has already fired this turn.",
+  no_target: "No enemy in range.",
+  too_close: "Too close: aim at least 3 squares away.",
+  blocked: "It can't get there.",
 };
 
 /** How far above the finger a dragged unit floats, in squares, so the finger does not hide it. */
@@ -1105,39 +1126,29 @@ function gameOverScreen(game: Game): HTMLElement {
     el(
       "div",
       { class: "menu-buttons row" },
-      el(
-        "button",
-        {
-          class: "btn primary",
-          "data-testid": "play-again",
-          onclick: () => {
-            clearGame();
-            // Same players, mode and opponent as last game, straight into building.
-            ui.vsComputer = game.ai !== undefined;
-            ui.mode = game.mode;
-            ui.names = [game.players[0].name, game.players[1].name];
-            startGame();
-          },
-        },
-        "Play again",
-      ),
+      el("button", { class: "btn primary", "data-testid": "play-again", onclick: () => playAgain(game) }, "Play again"),
       el("button", { class: "btn", "data-testid": "save-image", onclick: () => void saveBattlefieldImage(game) }, "Save image"),
-      el(
-        "button",
-        {
-          class: "btn",
-          onclick: () => {
-            clearGame();
-            ui.game = null;
-            ui.screen = "menu";
-            render();
-          },
-        },
-        "Main menu",
-      ),
+      el("button", { class: "btn", onclick: toMainMenu }, "Main menu"),
     ),
     vsComputer && ui.resultPopup && resultPopup(headline, game.winner === null ? "flat" : game.winner === human ? "happy" : "sad"),
   );
+}
+
+/** Play again: the same players, mode and opponent as the finished game, straight into building. */
+function playAgain(game: Game): void {
+  clearGame();
+  ui.vsComputer = game.ai !== undefined;
+  ui.mode = game.mode;
+  ui.names = [game.players[0].name, game.players[1].name];
+  startGame();
+}
+
+/** Main menu from the end screen: the finished game is thrown away. */
+function toMainMenu(): void {
+  clearGame();
+  ui.game = null;
+  ui.screen = "menu";
+  render();
 }
 
 /** vs Computer: a big win or lose card first; closing it shows the summary underneath. */

@@ -6,6 +6,7 @@ import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
 import { resolveShot, type ShotResult } from "./shots.ts";
 import { ARMY_SLOTS, armySlots, isFighting, typeOfId, unitState, type Unit } from "./units.ts";
+import { beginStrategicTurn } from "../strategic/rules/auto.ts";
 import { startStrategic } from "../strategic/rules/setup.ts";
 import type { StrategicState } from "../strategic/rules/types.ts";
 
@@ -53,7 +54,13 @@ export type Failure =
   | "unknown_unit"
   | "army_incomplete"
   | "shot_already_fired"
-  | "shot_not_fired";
+  | "shot_not_fired"
+  // Strategic orders: a unit may move and fire once a turn, within its range and reach.
+  | "already_moved"
+  | "already_fired"
+  | "no_target"
+  | "too_close"
+  | "blocked";
 
 export type Outcome<T = object> = ({ ok: true; game: Game } & T) | { ok: false; reason: Failure };
 
@@ -192,6 +199,8 @@ export function confirmHandoff(game: Game): Outcome {
   else {
     g.current = to;
     g.shotFired = false;
+    // Strategic: the player's infantry and fort act on their own before the player sees the map.
+    if (isStrategic(modeOf(g.mode))) return { ok: true, game: beginStrategicTurn(g) };
   }
   return { ok: true, game: g };
 }

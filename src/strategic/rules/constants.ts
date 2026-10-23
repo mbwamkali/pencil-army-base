@@ -41,8 +41,20 @@ export const TANK_RANGE = 2;
 /** A shell must be aimed at least this far (straight line) from the artillery's own footprint. */
 export const ARTILLERY_MIN_RANGE = 3;
 
-/** A shell drifts this far at most from where it was aimed. */
+/** A shell fired from the minimum range drifts this far at most from where it was aimed... */
 export const SHAKE_RADIUS = 1.5;
+/** ...and a quarter of a square more for every square of range beyond that, so a long blind shot is a gamble, not a plan. */
+export const SHAKE_PER_SQUARE = 0.25;
+
+/**
+ * How far a shell may drift when aimed `distance` squares (straight line) from the gun's own
+ * footprint: 1.5 squares at the minimum range of 3, about 3.25 at 10 squares and 6.75 at 24, the
+ * distance between the two bases on Medium. Without this a player could shell the enemy base
+ * from turn 1 and win most games before anyone had explored.
+ */
+export function shakeRadius(distance: number): number {
+  return SHAKE_RADIUS + SHAKE_PER_SQUARE * Math.max(0, distance - ARTILLERY_MIN_RANGE);
+}
 
 /** Infantry a truck carries along when it moves. */
 export const TRUCK_CAPACITY = 4;

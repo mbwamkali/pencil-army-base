@@ -7,6 +7,7 @@ import {
   ZOOM_STEP,
   baseCamera,
   cameraHolding,
+  centreCamera,
   clampCamera,
   fitCamera,
   fitScale,
@@ -306,6 +307,39 @@ describe("pinchCamera", () => {
     expect(c.scale).toBe(SCALE_MAX);
     const closed = pinchCamera(c, spread, { mid: from.mid, dist: 360 }, map, W, H);
     expect(closed.scale).toBeCloseTo(SCALE_MAX * 0.9, 9);
+  });
+});
+
+describe("centreCamera", () => {
+  it("looks straight at the point at the same scale when the map allows", () => {
+    const c: Camera = { cx: 8, cy: 10, scale: SQ_NEAR };
+    expect(centreCamera(c, { x: 21, y: 9 }, map, W, H)).toEqual({ cx: 21, cy: 9, scale: SQ_NEAR });
+  });
+
+  it("stops at the map's edges, so a unit in a corner comes as close to the middle as the paper allows", () => {
+    const c: Camera = { cx: 20, cy: 10, scale: SQ_NEAR };
+    // 744 / 38 squares wide and 412 / 38 tall: the centre can get no nearer the corner than half of that.
+    const corner = centreCamera(c, { x: 1, y: 1 }, map, W, H);
+    expect(corner.scale).toBe(SQ_NEAR);
+    expect(corner.cx).toBeCloseTo(W / SQ_NEAR / 2, 9);
+    expect(corner.cy).toBeCloseTo(H / SQ_NEAR / 2, 9);
+    expect(edges(corner).left).toBeCloseTo(0, 9);
+    expect(edges(corner).top).toBeCloseTo(0, 9);
+    const far = centreCamera(c, { x: 39, y: 19.5 }, map, W, H);
+    expect(edges(far).right).toBeCloseTo(map.w, 9);
+    expect(edges(far).bottom).toBeCloseTo(map.h, 9);
+  });
+
+  it("keeps the whole map centred on an axis the view cannot fill", () => {
+    const whole = fitCamera(map, W, H);
+    const c = centreCamera(whole, { x: 30, y: 2 }, map, W, H);
+    expect(c).toEqual(whole);
+  });
+
+  it("never changes the scale, even from an unclamped one", () => {
+    const c = centreCamera({ cx: 20, cy: 10, scale: 1000 }, { x: 20, y: 10 }, map, W, H);
+    expect(c.scale).toBe(SCALE_MAX);
+    expect(centreCamera({ cx: 20, cy: 10, scale: 25 }, { x: 10, y: 10 }, map, W, H).scale).toBe(25);
   });
 });
 

@@ -50,7 +50,7 @@ export const HIT_INSET: Record<UnitType, { side: number; top: number; bottom: nu
   artillery: { side: 0.1, top: 0.35, bottom: 0.25 },
   infantry: { side: 0.15, top: 0.1, bottom: 0.05 },
   wall: { side: 0, top: 0, bottom: 0 },
-  truck: { side: 0.05, top: 0.45, bottom: 0.3 },
+  truck: { side: 0.05, top: 0.5, bottom: 0.25 },
 };
 
 /** Hits needed to destroy a unit. */

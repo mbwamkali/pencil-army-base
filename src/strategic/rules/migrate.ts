@@ -10,8 +10,10 @@ export function upgradeStrategic(game: Game): Game {
   const s = game.strategic;
   if (!s) return game;
   s.orders ??= {};
-  // A saved game is mid-turn, so that turn's automatic actions count as done.
-  s.autoDoneTurn ??= game.turn;
+  // A game saved mid-turn has had that turn's automatic actions (none, in the first build). One
+  // saved on the handoff screen is already stamped with the next turn's number, and that turn's
+  // infantry step and spawn have yet to run, so they must not count as done.
+  s.autoDoneTurn ??= game.phase === "handoff" ? game.turn - 1 : game.turn;
   s.shots ??= [];
   s.events ??= [];
   s.nextInfantry ??= [STRATEGIC_ARMY.infantry + 1, STRATEGIC_ARMY.infantry + 1];

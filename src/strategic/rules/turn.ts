@@ -7,7 +7,8 @@ const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
 /**
  * End turn in Strategic: the player's units take a last look around (so everything in sight stays
  * explored), the turn counter moves on and the phone goes to the black handoff screen for the other
- * player. Nothing moves or shoots yet; that comes in later builds.
+ * player, whose infantry and fort act when they tap Start (beginStrategicTurn). Only a turn in play
+ * can end: once a fort has fallen the game is over and this fails like any other order.
  */
 export function endStrategicTurn(game: Game): Outcome {
   if (game.phase !== "turn" || !isStrategic(modeOf(game.mode)) || !game.strategic) return { ok: false, reason: "wrong_phase" };

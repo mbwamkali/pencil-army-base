@@ -118,6 +118,14 @@ export function panCamera(c: Camera, delta: Point, map: Pick<StrategicMap, "w" |
   return clampCamera({ cx: c.cx - delta.x / c.scale, cy: c.cy - delta.y / c.scale, scale: c.scale }, map, width, height);
 }
 
+/**
+ * The camera looking straight at a map point at its current scale, as far as the clamp allows: tapping
+ * an order row brings that unit into view without changing how far in the player had zoomed.
+ */
+export function centreCamera(c: Camera, at: Point, map: Pick<StrategicMap, "w" | "h">, width: number, height: number): Camera {
+  return clampCamera({ cx: at.x, cy: at.y, scale: c.scale }, map, width, height);
+}
+
 /** Two fingers on the view: their midpoint (stage px from the view's top-left) and the distance between them. */
 export interface Pinch {
   mid: Point;

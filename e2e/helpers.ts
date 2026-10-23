@@ -49,7 +49,45 @@ export async function buildBothAndStart(page: Page): Promise<void> {
   await expect(page.getByTestId("shooter")).toBeVisible();
 }
 
-const SIZE: Record<string, [number, number]> = { fort: [3, 3], tank: [2, 2], artillery: [2, 2], infantry: [1, 1], wall: [2, 1] };
+/**
+ * A Strategic game from the menu: Random layouts for both players, then Start for player 1's first
+ * turn. Returns the game as saved just before that Start (both bases on the map, nobody has acted),
+ * so a test can see what the turn's automatic infantry step changed.
+ */
+export async function strategicGame(page: Page, seed: number, names: [string, string] = ["", ""]): Promise<Game> {
+  await startNewGame(page, seed, names, "strategic");
+  await page.getByTestId("random-layout").click();
+  await page.getByTestId("done").click();
+  await page.getByTestId("start").click();
+  await page.getByTestId("random-layout").click();
+  await page.getByTestId("done").click();
+  await expect(page.getByTestId("handoff")).toBeVisible();
+  const before = await savedGame(page);
+  await page.getByTestId("start").click();
+  await expect(page.getByTestId("strategic-map")).toBeVisible();
+  return before;
+}
+
+/** World units per map square in the Strategic map's SVG (SQ_NEAR in src/strategic/ui/camera.ts). */
+const MAP_UNIT = 38;
+
+/** Screen position of a point on the Strategic map, given in map squares, read from the svg's viewBox as it is now. */
+export async function mapPoint(page: Page, x: number, y: number): Promise<{ x: number; y: number }> {
+  const svg = page.getByTestId("strategic-map");
+  const box = await svg.boundingBox();
+  const viewBox = ((await svg.getAttribute("viewBox")) ?? "").split(" ").map(Number);
+  if (!box || viewBox.length !== 4) throw new Error("no Strategic map on screen");
+  const [vx, vy, vw, vh] = viewBox as [number, number, number, number];
+  return { x: box.x + ((x * MAP_UNIT - vx) / vw) * box.width, y: box.y + ((y * MAP_UNIT - vy) / vh) * box.height };
+}
+
+/** A tap on the Strategic map at a point in map squares (it must be in view). */
+export async function tapMap(page: Page, x: number, y: number): Promise<void> {
+  const p = await mapPoint(page, x, y);
+  await page.mouse.click(p.x, p.y);
+}
+
+const SIZE: Record<string, [number, number]> = { fort: [3, 3], tank: [2, 2], artillery: [2, 2], infantry: [1, 1], wall: [2, 1], truck: [2, 2] };
 
 export function centreOfUnit(u: { type: string; x: number; y: number; upright: boolean }): { x: number; y: number } {
   const [w, h] = SIZE[u.type] as [number, number];

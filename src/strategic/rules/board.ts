@@ -66,11 +66,13 @@ export function overlapsTerrain(map: StrategicMap, r: Rect): boolean {
 
 /**
  * True when a footprint can be stood on: inside the map, off the terrain and clear of every living
- * unit except the ones in `ignore` (the moving unit itself, and anything riding with it).
+ * unit except the ones in `ignore` (the moving unit itself, say). `ignore` holds the unit objects
+ * themselves, not ids: both players name their units tank-1, tank-2 and so on, so ignoring by id
+ * would let a tank drive onto the enemy's tank of the same number.
  */
-export function isFree(map: StrategicMap, units: readonly Unit[], r: Rect, ignore: ReadonlySet<string> = new Set()): boolean {
+export function isFree(map: StrategicMap, units: readonly Unit[], r: Rect, ignore: ReadonlySet<Unit> = new Set()): boolean {
   if (!insideMap(map, r) || overlapsTerrain(map, r)) return false;
-  return !units.some((u) => !ignore.has(u.id) && isAlive(u) && rectsOverlap(r, rectOf(u)));
+  return !units.some((u) => !ignore.has(u) && isAlive(u) && rectsOverlap(r, rectOf(u)));
 }
 
 /** The living unit whose footprint holds a square, if any. */
@@ -85,15 +87,15 @@ export function unitAtSquare(units: readonly Unit[], x: number, y: number): Unit
 /**
  * Every top-left square a unit can reach this turn, with the path of top-left squares to get there
  * (the start left out). Breadth first over the eight directions; every step costs one square and
- * every footprint along the way must be free. `units` are both sides' units; the mover (and any
- * riders) are ignored so a unit never blocks itself.
+ * every footprint along the way must be free. `units` are both sides' units and must hold the very
+ * `unit` object, which is ignored so it never blocks itself.
  */
 export function reachable(
   map: StrategicMap,
   units: readonly Unit[],
   unit: Unit,
   range: number = MOVE[unit.type],
-  ignore: ReadonlySet<string> = new Set([unit.id]),
+  ignore: ReadonlySet<Unit> = new Set([unit]),
 ): Map<string, Point[]> {
   const out = new Map<string, Point[]>();
   if (range <= 0 || !isAlive(unit)) return out;
