@@ -1,6 +1,7 @@
 import { ARMY, GRID_H, GRID_W, type UnitType } from "./constants.ts";
 
-export const MODE_IDS = ["skirmish", "battle", "score"] as const;
+/** Order matters: a layout code stores the mode as its index here, so new modes go at the end. */
+export const MODE_IDS = ["skirmish", "battle", "score", "strategic"] as const;
 export type ModeId = (typeof MODE_IDS)[number];
 
 /**
@@ -58,7 +59,19 @@ export const MODES: Record<ModeId, Mode> = {
     win: "score",
     shotsEach: 20,
   },
+  // A Skirmish-size base with one extra tank; the base is dropped onto a big map once both are built.
+  strategic: {
+    id: "strategic",
+    name: "Strategic (test)",
+    blurb: "Test build. A big paper map hidden by fog of war: explore to find the enemy base. Two players on one phone.",
+    army: { fort: 1, tank: 2, artillery: 1, infantry: 2, wall: 2 },
+    grid: { w: 12, h: 6 },
+    win: "core",
+  },
 };
+
+/** Strategic has its own map, fog of war and turn rules (src/strategic); the shooting rules don't apply to it. */
+export const isStrategic = (mode: Pick<Mode, "id">): boolean => mode.id === "strategic";
 
 /** Points for each hit on a unit. Walls score nothing; a fort scores on both of its hits. */
 export const POINTS: Record<UnitType, number> = { infantry: 1, tank: 3, artillery: 3, fort: 5, wall: 0 };

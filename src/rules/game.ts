@@ -1,11 +1,13 @@
 import { AI_NAME, chooseEasyShot } from "./ai.ts";
 import { computerBase } from "./maps.ts";
 import { ARMY, DEFAULT_NAMES, SHOT_RADIUS, UNIT_TYPES, type UnitType } from "./constants.ts";
-import { POINTS, modeOf, type Mode, type ModeId } from "./modes.ts";
+import { POINTS, isStrategic, modeOf, type Mode, type ModeId } from "./modes.ts";
 import { placementProblem, type PlacementProblem } from "./placement.ts";
 import { Rng } from "./rng.ts";
 import { resolveShot, type ShotResult } from "./shots.ts";
 import { ARMY_SLOTS, armySlots, isFighting, typeOfId, unitState, type Unit } from "./units.ts";
+import { startStrategic } from "../strategic/rules/setup.ts";
+import type { StrategicState } from "../strategic/rules/types.ts";
 
 export type PlayerIndex = 0 | 1;
 export type Phase = "build" | "handoff" | "turn" | "over";
@@ -41,6 +43,8 @@ export interface Game {
   winner: PlayerIndex | null;
   /** The player the computer plays in a single player game (always player 2), or absent for two players. */
   ai?: PlayerIndex;
+  /** Strategic mode only: the map, where the bases landed and the fog of war. Set once both bases are built. */
+  strategic?: StrategicState;
 }
 
 export type Failure =
@@ -155,18 +159,23 @@ export function isArmyComplete(units: readonly Unit[], mode: Mode = modeOf("batt
 /** The player taps Done. Only works once every unit is placed. */
 export function finishBuild(game: Game, player: PlayerIndex): Outcome {
   if (game.phase !== "build" || game.building !== player) return fail("wrong_phase");
-  if (!isArmyComplete(game.players[player].units, modeOf(game.mode))) return fail("army_incomplete");
-  const g = clone(game);
+  const mode = modeOf(game.mode);
+  if (!isArmyComplete(game.players[player].units, mode)) return fail("army_incomplete");
+  let g = clone(game);
   if (g.ai !== undefined) {
     // Single player: the computer builds its base at once and play starts with no handoff screen.
     const rng = new Rng(g.rngState);
-    g.players[g.ai].units = computerBase(rng, modeOf(g.mode));
+    g.players[g.ai].units = computerBase(rng, mode);
     g.rngState = rng.state;
+    // The game never offers Strategic against the computer yet, but if one exists it is still set up whole.
+    if (isStrategic(mode)) g = startStrategic(g);
     g.phase = "turn";
     g.current = g.firstShooter;
     g.shotFired = false;
     return { ok: true, game: g };
   }
+  // Strategic: with both bases built, drop them onto the map before the first player's turn.
+  if (player === 1 && isStrategic(mode)) g = startStrategic(g);
   g.phase = "handoff";
   g.handoff = player === 0 ? { to: 1, then: "build" } : { to: g.firstShooter, then: "turn" };
   return { ok: true, game: g };
@@ -189,7 +198,7 @@ export function confirmHandoff(game: Game): Outcome {
 
 /** Fire the turn's single shot at the enemy base, exactly where aimed (grid squares). */
 export function fire(game: Game, x: number, y: number): Outcome<{ result: ShotResult }> {
-  if (game.phase !== "turn") return fail("wrong_phase");
+  if (game.phase !== "turn" || isStrategic(modeOf(game.mode))) return fail("wrong_phase");
   if (game.shotFired) return fail("shot_already_fired");
   const g = clone(game);
   const shooter = g.players[g.current];
@@ -220,9 +229,9 @@ export function fire(game: Game, x: number, y: number): Outcome<{ result: ShotRe
   return { ok: true, game: g, result };
 }
 
-/** After the shot, the player taps End turn and the phone goes to the black handoff screen. */
+/** After the shot, the player taps End turn and the phone goes to the black handoff screen. Strategic has its own (endStrategicTurn). */
 export function endTurn(game: Game): Outcome {
-  if (game.phase !== "turn") return fail("wrong_phase");
+  if (game.phase !== "turn" || isStrategic(modeOf(game.mode))) return fail("wrong_phase");
   if (!game.shotFired) return fail("shot_not_fired");
   const g = clone(game);
   g.turn += 1;
@@ -243,6 +252,7 @@ export function endTurn(game: Game): Outcome {
  */
 export function playComputerTurn(game: Game): Outcome<{ result: ShotResult }> {
   if (game.phase !== "turn" || game.ai === undefined || game.current !== game.ai) return fail("wrong_phase");
+  if (isStrategic(modeOf(game.mode))) return fail("wrong_phase");
   if (game.shotFired) return fail("shot_already_fired");
   const rng = new Rng(game.rngState);
   const aim = chooseEasyShot(game.players[game.ai].shots, modeOf(game.mode).grid, rng);

@@ -14,6 +14,7 @@ import {
   finishBuild,
   fire,
   isArmyComplete,
+  isStrategic,
   modeOf,
   placeUnit,
   randomLayout,
@@ -70,8 +71,9 @@ function shoot(g: Game, x: number, y: number): Game {
 }
 
 describe("mode presets", () => {
-  it("has the four modes, with Skirmish smaller and the others the full army", () => {
-    expect(MODE_IDS).toEqual(["skirmish", "battle", "score"]);
+  it("has the four modes, with Skirmish and Strategic smaller and the others the full army", () => {
+    // Strategic comes last so the mode byte in older layout codes still means the same mode.
+    expect(MODE_IDS).toEqual(["skirmish", "battle", "score", "strategic"]);
     expect(MODES.skirmish.army).toEqual({ fort: 1, tank: 1, artillery: 1, infantry: 2, wall: 2 });
     expect(MODES.skirmish.grid).toEqual({ w: 12, h: 6 });
     for (const id of ["battle", "score"] as const) {
@@ -79,6 +81,11 @@ describe("mode presets", () => {
       expect(MODES[id].army.tank).toBe(3);
     }
     expect(MODES.score.shotsEach).toBe(20);
+    expect(MODES.strategic.grid).toEqual(MODES.skirmish.grid);
+    expect(MODES.strategic.army).toEqual({ ...MODES.skirmish.army, tank: 2 });
+    expect(MODES.strategic.name).toBe("Strategic (test)");
+    expect(isStrategic(MODES.strategic)).toBe(true);
+    expect(MODE_IDS.filter((id) => isStrategic(MODES[id]))).toEqual(["strategic"]);
   });
 
   it("keeps the same board shape so the drawing scales cleanly", () => {

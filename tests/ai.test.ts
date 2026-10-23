@@ -10,12 +10,16 @@ import {
   endTurn,
   finishBuild,
   fire,
+  isStrategic,
   pasteLayout,
   playComputerTurn,
   randomUnits,
   type Game,
   type ModeId,
 } from "../src/rules/index.ts";
+
+/** The modes the computer can play: every Quick action mode. Strategic has no computer opponent yet. */
+const QUICK_MODES = MODE_IDS.filter((id) => !isStrategic(MODES[id]));
 
 /** A single player game with the human's base built at random, ready for the first turn. */
 function start(seed: number, mode: ModeId = "skirmish", layoutSeed = 99): Game {
@@ -104,7 +108,7 @@ describe("the computer's turn", () => {
   });
 
   it("never fires twice at the same spot, and every shot lands on the board", () => {
-    for (const mode of MODE_IDS) {
+    for (const mode of QUICK_MODES) {
       for (const seed of [1, 2, 3, 4, 5]) {
         const { game } = playOut(start(seed, mode));
         const shots = game.players[1].shots;
@@ -154,8 +158,9 @@ describe("the computer's turn", () => {
     expect(aim.y).toBeLessThanOrEqual(grid.h);
   });
 
-  it("finishes every game without errors, in every mode", () => {
-    for (const mode of MODE_IDS) {
+  it("finishes every game without errors, in every Quick action mode", () => {
+    expect(QUICK_MODES).toEqual(["skirmish", "battle", "score"]);
+    for (const mode of QUICK_MODES) {
       for (const seed of [31, 32, 33]) {
         const { game } = playOut(start(seed, mode));
         expect(game.phase).toBe("over");

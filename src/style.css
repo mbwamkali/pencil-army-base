@@ -1019,3 +1019,45 @@ body.large-text .status b {
 .status b.blocked {
   color: var(--ink);
 }
+
+/* Strategic (test build): the fog-of-war map fills the stage left of a slimmer, wider panel. */
+body[data-screen="strategic"] #stage {
+  background: #e6e2d8;
+}
+
+.screen.strategic .panel {
+  left: 744px;
+  width: 176px;
+}
+
+.strategic-map-wrap {
+  background: #e6e2d8;
+}
+
+.strategic-svg {
+  cursor: grab;
+}
+
+.strategic-svg:active {
+  cursor: grabbing;
+}
+
+/* The mini-map: a thin ink edge drawn outside the box, so it never eats into the 128 x 64 drawing. */
+.strategic-minimap {
+  border-radius: 3px;
+  box-shadow: 0 0 0 1.5px var(--ink), 0 2px 8px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+}
+
+.strategic-status p {
+  margin: 0 0 6px;
+}
+
+.strategic-note {
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+body.large-text .strategic-note {
+  font-size: 16px;
+}

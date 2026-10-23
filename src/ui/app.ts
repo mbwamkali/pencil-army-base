@@ -25,10 +25,11 @@ import {
 import { AI_NAME } from "../rules/ai.ts";
 import { encodeLayout, pasteLayout, type CodeProblem } from "../rules/code.ts";
 import { randomLayout } from "../rules/layout.ts";
-import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, modeOf, type ModeId } from "../rules/modes.ts";
+import { DEFAULT_MODE, MODES, MODE_IDS, coreCount, fightingCount, isStrategic, modeOf, type ModeId } from "../rules/modes.ts";
 import { placementProblem, snapWall, turnWall, type Candidate } from "../rules/placement.ts";
 import { armySlots, rectOf, sizeOf, unitState, type Unit } from "../rules/units.ts";
 import { targetView } from "../rules/view.ts";
+import { strategicScreen } from "../strategic/ui/screen.ts";
 import { UNIT_LABEL, unitArt } from "./art.ts";
 import {
   createBoard,
@@ -168,6 +169,10 @@ export function render(): void {
   } else if (game.phase === "build") {
     screenName = "build";
     node = buildScreen(game);
+  } else if (isStrategic(modeOf(game.mode))) {
+    // Strategic has its own turn screen. It cannot end yet, but a finished game still gets the summary rather than a crash.
+    screenName = game.phase === "turn" ? "strategic" : "over";
+    node = game.phase === "turn" ? strategicScreen(game, { menuButton, setGame, overlay: () => (ui.menu !== "closed" ? menuOverlay() : null) }) : gameOverScreen(game);
   } else if (game.phase === "turn" && game.ai !== undefined && game.current === game.ai) {
     screenName = "computer-turn";
     node = computerTurnScreen(game);
@@ -340,6 +345,8 @@ function loadMode(): ModeId {
 
 function pickMode(id: ModeId): void {
   ui.mode = id;
+  // Strategic is two players on one phone only (decision 18), so it drops a vs Computer choice already made.
+  if (isStrategic(MODES[id])) ui.vsComputer = false;
   try {
     localStorage.setItem(MODE_KEY, id);
   } catch {
@@ -383,12 +390,14 @@ function modePicker(): HTMLElement {
 }
 
 function opponentScreen(): HTMLElement {
-  const choice = (vsComputer: boolean, testid: string, name: string, note: string) =>
+  const strategic = isStrategic(MODES[ui.mode]);
+  const choice = (vsComputer: boolean, testid: string, name: string, note: string, disabled = false) =>
     el(
       "button",
       {
         class: "btn opponent-btn",
         "data-testid": testid,
+        disabled,
         onclick: () => {
           ui.vsComputer = vsComputer;
           ui.screen = "setup";
@@ -406,7 +415,7 @@ function opponentScreen(): HTMLElement {
       "div",
       { class: "opponent-row" },
       choice(false, "opponent-share", "Share device", "Two players take turns on this phone"),
-      choice(true, "opponent-computer", "vs Computer", `Play against ${AI_NAME}`),
+      choice(true, "opponent-computer", "vs Computer", strategic ? "Not in Strategic yet" : `Play against ${AI_NAME}`, strategic),
     ),
     modePicker(),
     el("div", { class: "menu-buttons row" }, el("button", { class: "btn", "data-testid": "back", onclick: () => ((ui.screen = "menu"), render()) }, "Back")),
@@ -414,6 +423,8 @@ function opponentScreen(): HTMLElement {
 }
 
 function startGame(): void {
+  // The computer cannot play Strategic yet, whatever an older choice says.
+  if (isStrategic(MODES[ui.mode])) ui.vsComputer = false;
   ui.screen = "game";
   ui.turnKey = "";
   ui.endShown = false;

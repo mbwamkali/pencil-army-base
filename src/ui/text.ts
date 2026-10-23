@@ -92,6 +92,12 @@ export const HOW_TO_PLAY: { heading: string; body: string[] }[] = [
     ],
   },
   {
+    heading: "Strategic (test build)",
+    body: [
+      "A try-out of a bigger game, for two players on one phone. Each of you builds a small base as usual, then both bases are dropped onto a big paper map hidden by fog of war. You only see the ground near your own units; the rest stays blank until you explore it. Find the enemy base. Drag to pan and pinch to zoom, tap Whole map to see the whole sheet, and tap the mini-map in the corner to jump. End turn passes the phone. Orders and shooting come in a later build.",
+    ],
+  },
+  {
     heading: "Winning",
     body: [
       "In Skirmish and Battle, the first player to destroy the other side's fort and every tank and artillery wins. Infantry are optional, but they still score points. Score attack: after 20 shots each, the higher score wins. Walls left standing never matter. When the game ends, both bases are revealed so you can see the near misses.",
