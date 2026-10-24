@@ -4,10 +4,7 @@ import {
   SHOT_RADIUS,
   circleHitsRect,
   confirmHandoff,
-  createGame,
-  finishBuild,
   hitRectOf,
-  randomLayout,
   rectOf,
   rectsOverlap,
   typeOfId,
@@ -18,11 +15,13 @@ import { gameInBattle } from "./helpers.ts";
 import {
   ARTILLERY_MIN_RANGE,
   BASE_GRID,
+  SHAKE_MAX,
   SHAKE_RADIUS,
   SHAKE_PER_SQUARE,
   aimProblem,
   distanceToRect,
   decodeExplored,
+  dropPoint,
   encodeExplored,
   endStrategicTurn,
   fireArtillery,
@@ -30,10 +29,10 @@ import {
   hpLeft,
   isAlive,
   key,
+  shakeFor,
   shakeRadius,
   landShell,
   lookAround,
-  mapOf,
   moveUnit,
   reachableFor,
   ridersFor,
@@ -43,13 +42,7 @@ import {
   visibleSquares,
   type Point,
 } from "../src/strategic/rules/index.ts";
-
-const medium = mapOf("medium-1");
-
-function ok(r: { ok: boolean; game?: Game; reason?: string }): Game {
-  if (!r.ok) throw new Error(r.reason);
-  return r.game!;
-}
+import { builtOnMedium, medium, ok } from "./strategic-fixtures.ts";
 
 const failed = (reason: string) => ({ ok: false, reason });
 
@@ -57,16 +50,12 @@ const failed = (reason: string) => ({ ok: false, reason });
 const unit = (id: string, x: number, y: number, hits = 0, upright = false): Unit => ({ id, type: typeOfId(id) as Unit["type"], x, y, upright, hits });
 
 /**
- * A Strategic game with both bases built at random and player 1 about to play turn 1, stepped into
- * the turn by hand so these tests do not depend on the automatic infantry phase.
+ * A Strategic game on Medium 1 with the stage 3 base spots ((2,7) and (26,7)) and player 1 about to
+ * play turn 1, stepped into the turn by hand so these tests do not depend on the automatic infantry
+ * phase.
  */
 function turnGame(seed = 1): Game {
-  let g = createGame({ seed, mode: "strategic" });
-  g = randomLayout(g, 0);
-  g = ok(finishBuild(g, 0));
-  g = ok(confirmHandoff(g));
-  g = randomLayout(g, 1);
-  g = ok(finishBuild(g, 1));
+  const g = builtOnMedium(seed);
   g.phase = "turn";
   g.handoff = null;
   g.current = 0;
@@ -145,7 +134,7 @@ describe("moveUnit", () => {
     return living.every((a, i) => living.every((b, j) => i === j || !rectsOverlap(rectOf(a), rectOf(b))));
   }
 
-  it("a truck lifts the infantry beside it (up to 4) and sets them down nearer the enemy base; one with no room stays", () => {
+  it("a truck lifts the infantry beside it (up to 4) and sets them down on the side it was heading; one with no room stays", () => {
     // The truck runs along the top edge to the corner; two walls and the corner leave only three
     // squares round the destination, one of them under infantry-3 already, so infantry-3 keeps its
     // square and the fourth rider has nowhere to go: both stay behind.
@@ -166,9 +155,10 @@ describe("moveUnit", () => {
       return { x: u.x, y: u.y };
     };
     expect(at("truck-1")).toEqual({ x: 0, y: 0 });
-    // Nearest the enemy base first, skipping the square infantry-3 still stands on.
-    expect(at("infantry-1")).toEqual({ x: 2, y: 1 });
-    expect(at("infantry-2")).toEqual({ x: 2, y: 0 });
+    // The truck drove left into the corner, so the point ahead of it, (-2,1), is off the map: the
+    // free squares nearest it are on the right, (2,0) and (2,1) tied first, in reading order.
+    expect(at("infantry-1")).toEqual({ x: 2, y: 0 });
+    expect(at("infantry-2")).toEqual({ x: 2, y: 1 });
     expect(at("infantry-3")).toEqual({ x: 2, y: 2 }); // its own square is the best one left: stays, not a rider
     expect(at("infantry-4")).toEqual({ x: 3, y: 2 }); // no room: stays
     expect(at("infantry-5")).toEqual({ x: 4, y: 2 }); // never a rider
@@ -198,8 +188,8 @@ describe("moveUnit", () => {
       const u = r.players[0].units.find((v) => v.id === id)!;
       return { x: u.x, y: u.y };
     };
-    expect(at("infantry-1")).toEqual({ x: 2, y: 4 });
-    expect(at("infantry-2")).toEqual({ x: 2, y: 3 });
+    expect(at("infantry-1")).toEqual({ x: 2, y: 3 });
+    expect(at("infantry-2")).toEqual({ x: 2, y: 4 });
     expect(at("infantry-3")).toEqual({ x: 0, y: 5 }); // no room: stays
     expect(at("infantry-4")).toEqual({ x: 2, y: 2 }); // keeps its square
     expect(r.strategic!.events.at(-1)).toMatchObject({ kind: "move", unitId: "truck-1", riders: ["infantry-1", "infantry-2"] });
@@ -209,7 +199,7 @@ describe("moveUnit", () => {
   it("the enemy's unit of the same name is no empty ground: not for a tank, not for a rider", () => {
     // Both armies name their units tank-1, infantry-1 and so on.
     const own = [unit("tank-1", 10, 10), unit("truck-1", 14, 12), unit("infantry-1", 13, 12)];
-    const enemy = [farFort, unit("tank-1", 12, 10), unit("tank-2", 10, 12), unit("infantry-1", 17, 11)];
+    const enemy = [farFort, unit("tank-1", 12, 10), unit("tank-2", 10, 12), unit("infantry-1", 17, 12)];
     const g = scenario(own, enemy);
     const reach = reachableFor(g, "tank-1").map(key);
     expect(reach).not.toContain("12,10");
@@ -217,12 +207,33 @@ describe("moveUnit", () => {
     expect(reach).not.toContain("10,12");
     expect(moveUnit(g, "tank-1", { x: 12, y: 10 })).toEqual(failed("blocked"));
     expect(moveUnit(g, "tank-1", { x: 10, y: 12 })).toEqual(failed("blocked"));
-    // The truck moves one square right; the square nearest the enemy base for its rider is (17,11), where the enemy infantry-1 stands.
+    // The truck moves one square right; of the squares nearest the point ahead of it, (17,13),
+    // the first is (17,12), where the enemy infantry-1 stands, so its rider takes (17,13).
     const r = ok(moveUnit(g, "truck-1", { x: 15, y: 12 }));
     expect(nobodyOverlaps(r)).toBe(true);
     const rider = r.players[0].units.find((u) => u.id === "infantry-1")!;
-    expect({ x: rider.x, y: rider.y }).toEqual({ x: 17, y: 12 });
+    expect({ x: rider.x, y: rider.y }).toEqual({ x: 17, y: 13 });
     expect(r.strategic!.events.at(-1)).toMatchObject({ kind: "move", unitId: "truck-1", riders: ["infantry-1"] });
+  });
+
+  it("riders hop off on the side the truck was heading, wherever the enemy base is", () => {
+    // Driving 4 squares right, the point ahead is (17,8): the riders get off on the truck's right.
+    expect(dropPoint({ type: "truck", upright: false }, { x: 8, y: 7 }, { x: 12, y: 7 })).toEqual({ x: 17, y: 8 });
+    expect(dropPoint({ type: "truck", upright: false }, { x: 3, y: 0 }, { x: 0, y: 0 })).toEqual({ x: -2, y: 1 });
+    const g = scenario([unit("truck-1", 8, 7), unit("infantry-1", 7, 7), unit("infantry-2", 7, 8)], [farFort]);
+    const r = ok(moveUnit(g, "truck-1", { x: 12, y: 7 }));
+    const at = (game: Game, id: string) => {
+      const u = game.players[0].units.find((v) => v.id === id)!;
+      return { x: u.x, y: u.y };
+    };
+    expect(at(r, "infantry-1")).toEqual({ x: 14, y: 7 });
+    expect(at(r, "infantry-2")).toEqual({ x: 14, y: 8 });
+    // Moving the hidden enemy base changes nothing the player can see.
+    for (const base of [{ x: 24, y: 8 }, { x: 27, y: 1 }, { x: 26, y: 13 }, { x: 2, y: 1 }]) {
+      const moved = structuredClone(g);
+      moved.strategic!.bases[1] = base;
+      expect(ok(moveUnit(moved, "truck-1", { x: 12, y: 7 })).players[0].units).toEqual(r.players[0].units);
+    }
   });
 
   it("ridersFor counts only the current player's living infantry touching the truck", () => {
@@ -272,6 +283,46 @@ describe("moveUnit", () => {
     expect(reach).toContain("5,8");
     expect(moveUnit(g, "tank-1", { x: 4, y: 3 })).toEqual(failed("blocked"));
     expect(moveUnit(g, "tank-1", { x: 5, y: 6 })).toEqual(failed("blocked"));
+  });
+
+  it("the reach goes round only what the player can see: an enemy in the fog leaves no gap in it", () => {
+    // The truck (squares 8-9 x 7-8) sees 2 squares; the enemy wall at (13,7) is 3 squares off its edge.
+    const hiddenWall = unit("wall-1", 13, 7);
+    const g = scenario([unit("truck-1", 8, 7)], [farFort, hiddenWall]);
+    expect(visibleSquares(g.players[0].units, medium).has(7 * medium.w + 13)).toBe(false);
+    const reach = reachableFor(g, "truck-1").map(key);
+    expect(reach).toContain("12,7"); // a footprint over the hidden wall
+    expect(reach).toEqual(reachableFor(scenario([unit("truck-1", 8, 7)], [farFort]), "truck-1").map(key));
+    // Once one of the player's units sees the wall, it is in the way like any unit.
+    const seen = scenario([unit("truck-1", 8, 7), unit("tank-1", 12, 10)], [farFort, hiddenWall]);
+    expect(reachableFor(seen, "truck-1").map(key)).not.toContain("12,7");
+  });
+
+  it("a move that runs into an enemy hidden in the fog stops beside it, spends the move and sees it", () => {
+    const own = [unit("truck-1", 8, 7), unit("infantry-1", 7, 7)];
+    const g = scenario(own, [farFort, unit("wall-1", 13, 7)]);
+    // Driving straight right to (13,7), the truck would cover the wall from (12,7) on.
+    const r = ok(moveUnit(g, "truck-1", { x: 13, y: 7 }));
+    const truck = r.players[0].units.find((u) => u.id === "truck-1")!;
+    expect({ x: truck.x, y: truck.y }).toEqual({ x: 11, y: 7 });
+    expect(r.strategic!.orders["truck-1"]).toEqual({ moved: true, fired: false });
+    expect(r.strategic!.events.at(-1)).toMatchObject({ kind: "move", unitId: "truck-1", from: { x: 8, y: 7 }, to: { x: 11, y: 7 }, riders: ["infantry-1"] });
+    // The rider gets off ahead of where the truck really stopped, round the wall.
+    const rider = r.players[0].units.find((u) => u.id === "infantry-1")!;
+    expect({ x: rider.x, y: rider.y }).toEqual({ x: 13, y: 8 });
+    expect(nobodyOverlaps(r)).toBe(true);
+    // Bumping into the wall shows it, and nothing more.
+    expect(r.strategic!.lastSeen[0].map((u) => u.id)).toEqual(["wall-1"]);
+    expect(moveUnit(r, "truck-1", { x: 12, y: 9 })).toEqual(failed("already_moved"));
+    // A tank stopped that way may still fire at what it ran into. Its only 3-step way to (11,4) is
+    // straight up the diagonal, and the last footprint covers the wall at (12,4).
+    const tankGame = scenario([unit("tank-1", 8, 7)], [farFort, unit("wall-1", 12, 4)]);
+    expect(tankTargets(tankGame, "tank-1")).toEqual([]);
+    expect(reachableFor(tankGame, "tank-1").map(key)).toContain("11,4");
+    const tank = ok(moveUnit(tankGame, "tank-1", { x: 11, y: 4 }));
+    expect(tank.players[0].units[0]).toMatchObject({ x: 10, y: 5 });
+    expect(tankTargets(tank, "tank-1")).toEqual(["wall-1"]);
+    expect(ok(fireTank(tank, "tank-1", "wall-1")).strategic!.orders["tank-1"]).toEqual({ moved: true, fired: true });
   });
 });
 
@@ -376,11 +427,16 @@ describe("aimProblem", () => {
 });
 
 describe("fireArtillery", () => {
-  it("shakes 1.5 squares at the minimum range and a quarter square more per square of range", () => {
-    expect(shakeRadius(0)).toBe(SHAKE_RADIUS);
-    expect(shakeRadius(ARTILLERY_MIN_RANGE)).toBe(SHAKE_RADIUS);
-    expect(shakeRadius(10)).toBeCloseTo(SHAKE_RADIUS + 7 * SHAKE_PER_SQUARE);
-    expect(shakeRadius(24)).toBeCloseTo(6.75);
+  it("shakes 0.75 squares at the minimum range, a twentieth of a square more per square of range, and never more than 2", () => {
+    expect([SHAKE_RADIUS, SHAKE_PER_SQUARE, SHAKE_MAX]).toEqual([0.75, 0.05, 2]);
+    expect(shakeRadius(0)).toBe(0.75);
+    expect(shakeRadius(ARTILLERY_MIN_RANGE)).toBe(0.75);
+    expect(shakeRadius(13)).toBeCloseTo(1.25);
+    expect(shakeRadius(23)).toBeCloseTo(1.75);
+    expect(shakeRadius(28)).toBeCloseTo(2);
+    expect(shakeRadius(60)).toBe(2);
+    // Across the whole of a Large map, corner to corner, it is still 2.
+    expect(shakeRadius(Math.hypot(60, 30))).toBe(SHAKE_MAX);
   });
 
   it("lands within the shake radius for its range, never off the map, drawing exactly u then v from the Rng (200 seeds)", () => {
@@ -396,6 +452,7 @@ describe("fireArtillery", () => {
       if (!r.ok) return;
       const drifted = Math.hypot(r.shot.x - aim.x, r.shot.y - aim.y);
       expect(drifted).toBeLessThanOrEqual(shakeRadius(distanceToRect(aim.x, aim.y, rectOf(gun))) + 1e-9);
+      expect(drifted).toBeLessThanOrEqual(shakeFor(g, "artillery-1", aim) + 1e-9); // the dashed circle the screen draws
       if (drifted > SHAKE_RADIUS) beyondMinimumShake++;
       expect(r.shot.x).toBeGreaterThanOrEqual(0);
       expect(r.shot.x).toBeLessThanOrEqual(medium.w);
@@ -411,7 +468,7 @@ describe("fireArtillery", () => {
       expect(r.game.strategic!.orders).toEqual({ "artillery-1": { moved: false, fired: true } });
     }
     expect(clamped).toBeGreaterThan(0);
-    expect(beyondMinimumShake).toBeGreaterThan(0); // the far aim shakes well past 1.5 squares
+    expect(beyondMinimumShake).toBeGreaterThan(0); // the far aim shakes up to 2 squares, well past 0.75
     expect(base.rngState).toBe(scenario([unit("artillery-1", 4, 8)], [farFort]).rngState); // nothing random happens on its own
   });
 

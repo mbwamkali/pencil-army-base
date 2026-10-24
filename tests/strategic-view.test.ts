@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Rng, confirmHandoff, createGame, finishBuild, randomLayout, typeOfId, type Game, type PlayerIndex, type Unit } from "../src/rules/index.ts";
+import { Rng, typeOfId, type Game, type PlayerIndex, type Unit } from "../src/rules/index.ts";
 import {
   BASE_GRID,
   decodeExplored,
@@ -10,7 +10,6 @@ import {
   landingSquare,
   lookAround,
   shakeRadius,
-  mapOf,
   moveUnit,
   revealView,
   shooterView,
@@ -23,28 +22,18 @@ import {
   type ShotHitRecord,
   type StrategicEvent,
 } from "../src/strategic/rules/index.ts";
-
-const medium = mapOf("medium-1");
-
-function ok(r: { ok: boolean; game?: Game; reason?: string }): Game {
-  if (!r.ok) throw new Error(r.reason);
-  return r.game!;
-}
+import { builtOnMedium, medium, ok } from "./strategic-fixtures.ts";
 
 /** A unit from its id ("tank-2" is a tank) at a top-left square. */
 const unit = (id: string, x: number, y: number, hits = 0, upright = false): Unit => ({ id, type: typeOfId(id) as Unit["type"], x, y, upright, hits });
 
 /**
- * A Strategic game with both bases built at random and player 1 about to play turn 1, stepped into
- * the turn by hand so these tests do not depend on the automatic infantry phase.
+ * A Strategic game on Medium 1 with the stage 3 base spots ((2,7) and (26,7)) and player 1 about to
+ * play turn 1, stepped into the turn by hand so these tests do not depend on the automatic infantry
+ * phase.
  */
 function turnGame(seed = 1): Game {
-  let g = createGame({ seed, mode: "strategic" });
-  g = randomLayout(g, 0);
-  g = ok(finishBuild(g, 0));
-  g = ok(confirmHandoff(g));
-  g = randomLayout(g, 1);
-  g = ok(finishBuild(g, 1));
+  const g = builtOnMedium(seed);
   g.phase = "turn";
   g.handoff = null;
   g.current = 0;
@@ -65,7 +54,7 @@ function scenario(own: Unit[], enemy: Unit[], seed = 1): Game {
   return lookAround(lookAround(g, 0), 1);
 }
 
-/** The widest shake on Medium, so a "steady" state aims exactly at any range. */
+/** The widest shake there is (a shell aimed corner to corner), so a "steady" state aims exactly at any range. */
 const WIDEST_SHAKE = shakeRadius(Math.hypot(medium.w, medium.h));
 
 /** The first Rng state from `from` whose shell barely drifts, so a test can aim exactly. */

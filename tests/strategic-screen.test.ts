@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { confirmHandoff, createGame, finishBuild, randomLayout, type Game } from "../src/rules/index.ts";
 import type { MapShot } from "../src/strategic/rules/index.ts";
+import { mapOf, terrainSquares } from "../src/strategic/rules/index.ts";
+import { clearLabelColumn } from "../src/strategic/ui/mapView.ts";
 import { describeMove, describeShell, describeTankShot, moveTarget, orderLabel } from "../src/strategic/ui/screen.ts";
 
 /** A game with a few units in known states, for the result lines that read hit points left. */
@@ -118,7 +120,45 @@ describe("result lines", () => {
     expect(describeMove("Tank 1", 0)).toBe("Tank 1 moved");
     expect(describeMove("Truck 1", 1)).toBe("Truck 1 moved with 1 rider");
     expect(describeMove("Truck 1", 3)).toBe("Truck 1 moved with 3 riders");
+    // Stopped beside an enemy that was hidden in the fog (now in sight).
+    expect(describeMove("Tank 1", 0, true)).toBe("Tank 1 stopped: enemy in the way");
+    expect(describeMove("Truck 1", 2, true)).toBe("Truck 1 stopped with 2 riders: enemy in the way");
     expect(orderLabel("tank-2", "tank")).toBe("Tank 2");
     expect(orderLabel("artillery-1", "artillery")).toBe("Artillery 1");
+  });
+});
+
+describe("half labels", () => {
+  const map = { w: 20 };
+  const right = { from: 10, to: 20 };
+
+  it("sit at the middle of their half when the top rows there are clear", () => {
+    expect(clearLabelColumn(map, new Set(), 15, 4, right)).toBe(15);
+  });
+
+  it("step aside from terrain in the top two rows, to the nearest clear column inside the half", () => {
+    // A wood on squares 14 and 15 of row 1: a label 4 wide must start at 16 or end by 14.
+    const wood = new Set([1 * 20 + 14, 1 * 20 + 15]);
+    expect(clearLabelColumn(map, wood, 15, 4, right)).toBe(18);
+    // Terrain lower down does not matter.
+    expect(clearLabelColumn(map, new Set([2 * 20 + 15]), 15, 4, right)).toBe(15);
+  });
+
+  it("stay put when nothing in the half is clear", () => {
+    const row0 = new Set(Array.from({ length: 10 }, (_, k) => 10 + k));
+    expect(clearLabelColumn(map, row0, 15, 4, right)).toBe(15);
+  });
+
+  it("keep clear of every Large map's terrain in both halves", () => {
+    for (const id of ["large-1", "large-2", "large-3"]) {
+      const m = mapOf(id);
+      const terrain = terrainSquares(m);
+      for (const half of [{ from: 0, to: m.w / 2 }, { from: m.w / 2, to: m.w }]) {
+        const span = 5;
+        const x = clearLabelColumn(m, terrain, (half.from + half.to) / 2, span, half);
+        for (let y = 0; y < 2; y++)
+          for (let c = Math.floor(x - span / 2); c < Math.ceil(x + span / 2); c++) expect(terrain.has(y * m.w + c), `${id} ${c},${y}`).toBe(false);
+      }
+    }
   });
 });

@@ -8,7 +8,6 @@ import { centreOf, footprintAt, isFree, key, reachable, ringAround, squareDistan
 import {
   ACTIVE_TYPES,
   ARTILLERY_MIN_RANGE,
-  BASE_GRID,
   DAMAGE,
   MOVE,
   TANK_RANGE,
@@ -17,7 +16,7 @@ import {
   shakeRadius,
 } from "./constants.ts";
 import { applyDamage } from "./damage.ts";
-import { distanceToRect, lookAround, unitSeen, visibleSquares } from "./fog.ts";
+import { distanceToRect, knownUnits, lookAround, unitSeen, visibleSquares } from "./fog.ts";
 import { mapOf, squareIndex } from "./maps.ts";
 import type { MapShot, OrderState, Point, RiderMove, ShotHitRecord, StrategicMap, StrategicState } from "./types.ts";
 
@@ -47,11 +46,6 @@ function ownUnit(game: Game, unitId: string): Unit | undefined {
 
 const orderOf = (s: StrategicState, unitId: string): OrderState => s.orders[unitId] ?? { moved: false, fired: false };
 
-/** The middle of a player's base. Riders and new infantry head for the enemy's; the player never sees it. */
-function baseCentre(s: StrategicState, p: PlayerIndex): Point {
-  return { x: s.bases[p].x + BASE_GRID.w / 2, y: s.bases[p].y + BASE_GRID.h / 2 };
-}
-
 /** The square a point on the map falls in (a point on the far edge counts as the last square). */
 export function landingSquare(p: Point, map: Pick<StrategicMap, "w" | "h">): number {
   const x = Math.max(0, Math.min(map.w - 1, Math.floor(p.x)));
@@ -68,12 +62,33 @@ function takeShotId(g: Game, by: PlayerIndex): number {
   return id;
 }
 
-/** Every top-left square one of the current player's units could move to right now (geometry only, orders aside). */
+/**
+ * Every top-left square one of the current player's units could move to right now, as far as the
+ * player knows (geometry only, orders aside): terrain, their own units and the enemy units in sight
+ * are in the way, an enemy in the fog is not. The screen washes these squares blue, so a hidden
+ * unit must leave no gap in them.
+ */
 export function reachableFor(game: Game, unitId: string): Point[] {
   const s = game.strategic;
   const unit = s && ownUnit(game, unitId);
   if (!s || !unit) return [];
-  return [...reachable(mapOf(s.map), allUnits(game), unit).values()].map((path) => path.at(-1) as Point);
+  return [...reachable(mapOf(s.map), knownUnits(game, game.current), unit).values()].map((path) => path.at(-1) as Point);
+}
+
+/**
+ * How far a unit really gets along a path planned round what its owner could see: up to the last
+ * top-left before a unit hidden in the fog stands in the way. There it stops, having bumped into
+ * that unit, which it sees once it looks around (the unit touches the square it stopped on). The
+ * first step always lies in sight, so a unit never bumps before it has moved at all.
+ */
+function driveAlong(map: StrategicMap, units: readonly Unit[], unit: Unit, path: readonly Point[]): Point {
+  const ignore = new Set([unit]);
+  let at: Point = { x: unit.x, y: unit.y };
+  for (const step of path) {
+    if (!isFree(map, units, footprintAt(unit, step.x, step.y), ignore)) break;
+    at = step;
+  }
+  return at;
 }
 
 /**
@@ -91,17 +106,30 @@ export function ridersFor(game: Game, truckId: string): string[] {
 }
 
 /**
- * Riders climb off around the truck's new footprint, nearest the enemy base first, each onto the
- * first square still free. Only a rider's own square counts as free for it: handing out a square
- * another rider is still standing on could leave that rider, should it then find no room, sharing
- * its square with the first. A rider whose best square is the one it stands on, or that finds no
- * free square, stays where it was and is not a rider. Changes the game in place; returns who rode
- * and where each one went, so a replay can move them too.
+ * Where riders hop off: a point ahead of the truck, as far beyond its new centre as the move that
+ * brought it there (new centre plus new centre minus old centre), so they get off on the side the
+ * truck was heading. Never toward the enemy base: its spot is hidden, and riders landing on its side
+ * would point at it.
  */
-function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, riders: readonly string[]): RiderMove[] {
+export function dropPoint(truck: Pick<Unit, "type" | "upright">, from: Point, to: Point): Point {
+  const a = centreOf(footprintAt(truck, from.x, from.y));
+  const b = centreOf(footprintAt(truck, to.x, to.y));
+  return { x: 2 * b.x - a.x, y: 2 * b.y - a.y };
+}
+
+/**
+ * Riders climb off around the truck's new footprint, nearest the point ahead of the truck first
+ * (dropPoint; ties in reading order), each onto the first square still free. Only a rider's own
+ * square counts as free for it: handing out a square another rider is still standing on could
+ * leave that rider, should it then find no room, sharing its square with the first. A rider whose
+ * best square is the one it stands on, or that finds no free square, stays where it was and is not
+ * a rider. Changes the game in place; returns who rode and where each one went, so a replay can
+ * move them too.
+ */
+function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, from: Point, riders: readonly string[]): RiderMove[] {
   const s = g.strategic as StrategicState;
   const map = mapOf(s.map);
-  const goal = baseCentre(s, other(p));
+  const goal = dropPoint(truck, from, truck);
   const spots = ringAround(rectOf(truck))
     .map((sq, i) => ({ sq, i, d: Math.hypot(sq.x + 0.5 - goal.x, sq.y + 0.5 - goal.y) }))
     .sort((a, b) => a.d - b.d || a.i - b.i)
@@ -119,9 +147,12 @@ function setDownRiders(g: Game, p: PlayerIndex, truck: Unit, riders: readonly st
 }
 
 /**
- * Move a tank or truck to a top-left square it can reach this turn. A truck takes the infantry
- * beside it along. The unit then looks around so new ground appears at once. A unit that has fired
- * stays put for the rest of the turn.
+ * Move a tank or truck to a top-left square it can reach this turn (reachableFor). It drives the
+ * shortest way round what its owner can see; should an enemy hidden in the fog stand on that way,
+ * it stops on the last square before it and its move is spent (driveAlong). Refusing the order
+ * instead would let a player probe the fog for free. A truck takes the infantry beside it along.
+ * The unit then looks around so new ground appears at once. A unit that has fired stays put for the
+ * rest of the turn.
  */
 export function moveUnit(game: Game, unitId: string, to: Point): Outcome {
   const s = stateInTurn(game);
@@ -131,15 +162,18 @@ export function moveUnit(game: Game, unitId: string, to: Point): Outcome {
   const order = orderOf(s, unitId);
   if (order.fired) return fail("already_fired");
   if (order.moved) return fail("already_moved");
-  if (!reachable(mapOf(s.map), allUnits(game), unit).has(key(to))) return fail("blocked");
-  const riders = unit.type === "truck" ? ridersFor(game, unitId) : [];
   const p = game.current;
+  const map = mapOf(s.map);
+  const path = reachable(map, knownUnits(game, p), unit).get(key(to));
+  if (!path) return fail("blocked");
+  const end = driveAlong(map, allUnits(game), unit, path);
+  const riders = unit.type === "truck" ? ridersFor(game, unitId) : [];
   let g = structuredClone(game);
   const mover = g.players[p].units.find((u) => u.id === unitId) as Unit;
   const from = { x: unit.x, y: unit.y };
-  mover.x = to.x;
-  mover.y = to.y;
-  const rode = setDownRiders(g, p, mover, riders);
+  mover.x = end.x;
+  mover.y = end.y;
+  const rode = setDownRiders(g, p, mover, from, riders);
   g = lookAround(g, p);
   const after = g.strategic as StrategicState;
   after.events.push({
@@ -149,7 +183,7 @@ export function moveUnit(game: Game, unitId: string, to: Point): Outcome {
     unitId,
     type: unit.type,
     from,
-    to: { x: to.x, y: to.y },
+    to: { x: end.x, y: end.y },
     riders: rode.map((r) => r.unitId),
     riderMoves: rode,
   });
@@ -235,8 +269,9 @@ export function shakeFor(game: Game, unitId: string, aim: Point): number {
  * A shell flies to the aim and drifts: the game's Rng draws u then v, and the landing is a point
  * spread evenly over the shake circle (the square root keeps it from bunching at the centre),
  * clamped onto the paper. The circle grows with the range (shakeRadius), so a shot at something a
- * tank can see lands close and a blind shot across the map is a gamble. It blows up whatever is under it on either side, with the Quick action
- * rule that a standing wall takes the whole blow. Nothing is revealed: the shot joins the record
+ * tank can see lands close and one across the map up to 2 squares off. It blows up whatever is
+ * under it on either side, with the Quick action rule that a standing wall takes the whole blow.
+ * Nothing is revealed: the shot joins the record
  * but the shooter's fog stays as it was. Each hit notes whether the shooter could see the unit as
  * the shell fell (the smudge reaches into squares beside the landing one, so a watched landing can
  * still clip a unit in the fog, and a blind landing a unit in sight); the shooter's view keeps only

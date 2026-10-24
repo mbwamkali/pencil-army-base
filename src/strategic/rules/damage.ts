@@ -17,7 +17,15 @@ export interface DamageResult {
  * (a stray shell on your own fort still loses you the game). Returns a new game.
  */
 export function applyDamage(game: Game, owner: PlayerIndex, unitId: string, amount: number, by: PlayerIndex): DamageResult {
-  const g = structuredClone(game);
+  return damageInPlace(structuredClone(game), owner, unitId, amount, by);
+}
+
+/**
+ * applyDamage on a game the caller already owns (a copy it made itself), changed in place. The start
+ * of a turn hurts many units one after another, and copying the whole game for every blow was the
+ * slow part of tapping Start late in a long game.
+ */
+export function damageInPlace(g: Game, owner: PlayerIndex, unitId: string, amount: number, by: PlayerIndex): DamageResult {
   const u = g.players[owner].units.find((v) => v.id === unitId);
   if (!u || amount <= 0) return { game: g, before: 0, after: 0, destroyed: false };
   const before = Math.max(0, HP[u.type] - u.hits);

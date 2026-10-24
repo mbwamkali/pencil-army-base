@@ -7,7 +7,7 @@ import { revealView, unitTracks } from "../rules/index.ts";
 import { createMapView, fitCamera } from "./mapView.ts";
 // reveal.ts imports this file too; only its function declarations are used here, and those are
 // ready before either file runs, so the loop between the two is harmless.
-import { revealHeadline, revealStats } from "./reveal.ts";
+import { revealHeadline, revealMapName, revealStats } from "./reveal.ts";
 
 /**
  * Save image on the Strategic results screen: the revealed map with every unit's track, the
@@ -19,7 +19,10 @@ import { revealHeadline, revealStats } from "./reveal.ts";
  * SVG files) is fetched once, kept as data URIs, and placed inside the map's own SVG first.
  */
 
-/** The map's width in the picture: 38 px a square on Medium, the scale the map's own drawing is made at. */
+/**
+ * The map's width in the picture: about 25 px a square on a 60-wide Large map (38, the scale the
+ * map's drawing is made at, on the 40-wide Medium 1), so the picture stays a size a phone shares easily.
+ */
 export const IMAGE_MAP_W = 1520;
 const PAD = 40;
 const HEAD_H = 90;
@@ -118,7 +121,8 @@ export async function strategicMapSvg(game: Game): Promise<{ svg: string; width:
   const view = revealView(game);
   const width = IMAGE_MAP_W;
   const height = Math.round((IMAGE_MAP_W * view.map.h) / view.map.w);
-  // Laid out at half size and painted at 2x: the whole map then sits at the drawing's own scale.
+  // Laid out at half size and painted at 2x: the whole map then fills the picture (at the drawing's
+  // own scale on a 40-wide map).
   const mapView = createMapView({
     view,
     width: width / 2,
@@ -199,7 +203,7 @@ export async function renderStrategicImage(game: Game): Promise<HTMLCanvasElemen
   ctx.font = `24px ${FONT}`;
   const [a, b] = [game.players[0].name, game.players[1].name];
   const legend = unitTracks(game).length > 0 ? ` Dotted lines: where units went (${a} in pencil, ${b} in red).` : "";
-  ctx.fillText(`Strategic, ${game.turn} turns.${legend}`, canvas.width / 2, statsTop + rowH * 2 + 46);
+  ctx.fillText(`Strategic on ${revealMapName(game)}, ${game.turn} turns.${legend}`, canvas.width / 2, statsTop + rowH * 2 + 46);
   return canvas;
 }
 

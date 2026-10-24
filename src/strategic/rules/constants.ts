@@ -19,7 +19,7 @@ export const STRATEGIC_ARMY: Record<UnitType, number> = MODES.strategic.army;
  */
 export const SIGHT: Record<UnitType, number> = { fort: 4, tank: 3, artillery: 2, infantry: 1, wall: 0, truck: 2 };
 
-/** Map sizes in squares. Only Medium has a map in this build; Small and Large follow. */
+/** Map sizes in squares. New games are played on Large maps; Medium 1 stays so old saves still load. */
 export const MAP_SIZES: Record<MapSize, Grid> = {
   small: { w: 30, h: 15 },
   medium: { w: 40, h: 20 },
@@ -42,19 +42,24 @@ export const TANK_RANGE = 2;
 export const ARTILLERY_MIN_RANGE = 3;
 
 /** A shell fired from the minimum range drifts this far at most from where it was aimed... */
-export const SHAKE_RADIUS = 1.5;
-/** ...and a quarter of a square more for every square of range beyond that, so a long blind shot is a gamble, not a plan. */
-export const SHAKE_PER_SQUARE = 0.25;
+export const SHAKE_RADIUS = 0.75;
+/** ...and a twentieth of a square more for every square of range beyond that... */
+export const SHAKE_PER_SQUARE = 0.05;
+/** ...but never more than this, so a shell aimed across the map still lands near the aim. */
+export const SHAKE_MAX = 2;
 
 /**
  * How far a shell may drift when aimed `distance` squares (straight line) from the gun's own
- * footprint: 1.5 squares at the minimum range of 3, about 3.25 at 10 squares and 6.75 at 24, the
- * distance between the two bases on Medium. Without this a player could shell the enemy base
- * from turn 1 and win most games before anyone had explored.
+ * footprint: 0.75 squares at the minimum range of 3, 1.25 at 13, 1.75 at 23 and the full 2 squares
+ * from 28 on. Enough that a shot is never certain, small enough that aiming matters: the enemy base
+ * lands at a random spot, so a player has to find it before shelling it pays.
  */
 export function shakeRadius(distance: number): number {
-  return SHAKE_RADIUS + SHAKE_PER_SQUARE * Math.max(0, distance - ARTILLERY_MIN_RANGE);
+  return Math.min(SHAKE_MAX, SHAKE_RADIUS + SHAKE_PER_SQUARE * Math.max(0, distance - ARTILLERY_MIN_RANGE));
 }
+
+/** Columns kept clear between a base and the centre line, so two bases start at least 8 columns apart and out of each other's sight. */
+export const CENTRE_GAP = 4;
 
 /** Infantry a truck carries along when it moves. */
 export const TRUCK_CAPACITY = 4;

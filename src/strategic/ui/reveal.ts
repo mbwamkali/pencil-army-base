@@ -36,6 +36,11 @@ export function revealHeadline(game: Game): string {
   return game.winner === null ? "Game over" : `${game.players[game.winner].name} wins!`;
 }
 
+/** The name of the map the game was played on ("The ridge"), so the players can say which map felt wrong. */
+export function revealMapName(game: Game): string {
+  return mapOf(game.strategic?.map).name;
+}
+
 /**
  * The match in numbers, one row per stat: turns played, units lost, shots fired, shots that hurt
  * at least one enemy unit (a wall counts: it took the blow), and how much of the map each player saw.
@@ -103,7 +108,8 @@ export function strategicRevealScreen(game: Game, ctx: RevealContext): HTMLEleme
     { class: "screen over strategic-reveal", "data-testid": "strategic-reveal" },
     el(
       "div",
-      { class: tracks.length > 0 ? "reveal-head with-legend" : "reveal-head" },
+      { class: "reveal-head" },
+      el("p", { class: "reveal-map-name", "data-testid": "reveal-map-name" }, `Map: ${revealMapName(game)}`),
       el("h2", { class: "winner", "data-testid": "winner" }, revealHeadline(game)),
       tracks.length > 0 &&
         el(

@@ -3,7 +3,7 @@ import type { PlayerIndex } from "../../rules/game.ts";
 import { sizeOf, type Rect } from "../../rules/units.ts";
 import { SHIELD_PATH, drawShotImage, drawUnit } from "../../ui/board.ts";
 import { el, sv } from "../../ui/dom.ts";
-import { SHAKE_RADIUS } from "../rules/constants.ts";
+import { MAP_SIZES, SHAKE_RADIUS } from "../rules/constants.ts";
 import type { DrawnUnit, MapShot, Point, ReplayMark, StrategicMap, StrategicView } from "../rules/types.ts";
 import {
   BASE_SIZE,
@@ -105,8 +105,10 @@ export interface MapView {
    * rounded by `pad`, so with pad = ARTILLERY_MIN_RANGE it traces exactly the "too close" line.
    */
   markRect(rect: Rect, cls: string, pad?: number): SVGRectElement;
-  /** An artillery aim in the overlay: a crosshair, a solid ring where the shell hits and a dashed ring of how far it may drift. */
-  /** Draws the aim cross with the shake circle (`shake` squares, the minimum by default). */
+  /**
+   * An artillery aim in the overlay: a crosshair, a solid ring where the shell hits and a dashed
+   * ring of how far it may drift (`shake` squares, the minimum by default).
+   */
   markAim(p: Point, shake?: number): SVGGElement;
   clearOverlay(): void;
   /** The unit whose footprint holds a map point: the viewer's living units first, then enemies in sight. */
@@ -352,7 +354,7 @@ export function createMapView(opts: MapViewOptions): MapView {
       fill: "none",
       class: "strategic-centre",
     }),
-    halfLabels(view, W, who),
+    halfLabels(view, S, who),
     sv("rect", { width: W, height: H, fill: "none", stroke: INK, "stroke-width": 2, class: "strategic-frame" }),
     // 5. the viewer's own base, and the enemy's once its fort has been seen.
     sv(
@@ -438,6 +440,14 @@ export function createMapView(opts: MapViewOptions): MapView {
     opts.minimap !== false && mini,
   );
 
+  /**
+   * With the whole map in view the mini-map only repeats it, and on a Large map it would cover the
+   * map's bottom-left corner, where player 1's base may stand: it steps aside until the view zooms in.
+   */
+  const showMini = (): void => {
+    mini.style.visibility = isWholeCamera(cam, map, width, height, inset) ? "hidden" : "visible";
+  };
+
   /** The only thing a pan or zoom changes: the viewBox, the mini-map's viewport rectangle, and the app's memory. */
   const setCam = (c: Camera): void => {
     cam = clampCamera(c, map, width, height, inset);
@@ -447,10 +457,12 @@ export function createMapView(opts: MapViewOptions): MapView {
     miniView.setAttribute("y", String(r.y));
     miniView.setAttribute("width", String(r.w));
     miniView.setAttribute("height", String(r.h));
+    showMini();
     opts.onCamera?.(cam);
   };
   const r0 = viewportRect(cam, width, height);
   for (const [k, v] of Object.entries({ x: r0.x, y: r0.y, width: r0.w, height: r0.h })) miniView.setAttribute(k, String(v));
+  showMini();
 
   const focusBase = (): void => setCam(baseCamera(map, view.base, width, height, inset));
 
@@ -618,7 +630,9 @@ export function createMapView(opts: MapViewOptions): MapView {
   const markAim = (p: Point, shake: number = SHAKE_RADIUS): SVGGElement => {
     const cx = p.x * S;
     const cy = p.y * S;
-    const arm = SHAKE_RADIUS * S + 8;
+    // The cross reaches well past the solid ring whatever the drift, so the aim reads at a glance
+    // even where the dashed drift ring is smaller than the ring the shell hits.
+    const arm = SHOT_RADIUS * S + 24;
     const g = sv(
       "g",
       { class: "strategic-aim", "data-aim": `${p.x},${p.y}` },
@@ -806,6 +820,36 @@ function terrainGroup(map: StrategicMap, treeId: string): SVGGElement {
   return g;
 }
 
+/** Roughly how wide a letter of the hand-drawn font is, in ems: enough to keep a label's box off the trees. */
+const LETTER_EM = 0.45;
+
+/**
+ * Where along the top of the map a label `span` squares wide goes: the column nearest `centre`
+ * whose box over the top two rows lies inside `half` (columns from..to) and holds no terrain, so the
+ * words never sit on a wood or a hill once that ground is drawn in. `centre` itself when no column
+ * in the half is clear.
+ */
+export function clearLabelColumn(
+  map: Pick<StrategicMap, "w">,
+  terrain: ReadonlySet<number>,
+  centre: number,
+  span: number,
+  half: { from: number; to: number },
+): number {
+  const clear = (x: number): boolean => {
+    const x0 = Math.floor(x - span / 2);
+    const x1 = Math.ceil(x + span / 2);
+    if (x0 < half.from || x1 > half.to) return false;
+    for (let y = 0; y < 2; y++) for (let c = x0; c < x1; c++) if (terrain.has(y * map.w + c)) return false;
+    return true;
+  };
+  for (let d = 0; d <= half.to - half.from; d++) {
+    if (clear(centre + d)) return centre + d;
+    if (d > 0 && clear(centre - d)) return centre - d;
+  }
+  return centre;
+}
+
 /** "Your" and "Enemy" on the turn screen; the players' names on the results screen, where both sides look on. */
 function labelsFor(view: Pick<StrategicView, "viewer">, names?: [string, string]): { own: string; enemy: string } {
   if (!names) return { own: "Your", enemy: "Enemy" };
@@ -815,20 +859,32 @@ function labelsFor(view: Pick<StrategicView, "viewer">, names?: [string, string]
 /**
  * "Your half" / "Enemy half" at the top, as on the mockup, with a hint under the enemy label until the
  * first enemy square is explored. A paper-coloured halo keeps the text readable over the hatching.
+ * The labels are mostly read with the whole map in view, so on a map wider than Medium's they grow
+ * with it and read the same size there. Each sits in the middle of its half, or as near it as it
+ * can without covering terrain.
  */
-function halfLabels(view: StrategicView, W: number, who: { own: string; enemy: string }): SVGGElement {
+function halfLabels(view: StrategicView, S: number, who: { own: string; enemy: string }): SVGGElement {
   const { map } = view;
   const ownLeft = view.base.x + BASE_SIZE.w / 2 < map.w / 2;
-  const halo = { stroke: UNEXPLORED, "stroke-width": 5, "paint-order": "stroke", "stroke-linejoin": "round" };
-  const label = (x: number, y: number, size: number, text: string, cls: string): SVGTextElement =>
-    sv("text", { x, y, "text-anchor": "middle", "font-size": size, fill: INK_SOFT, class: cls, ...halo }, text);
-  const enemyX = ownLeft ? (3 * W) / 4 : W / 4;
+  const k = Math.max(1, map.w / MAP_SIZES.medium.w);
+  const size = 24 * k;
+  const terrain = terrainSquares(map);
+  const left = { from: 0, to: map.w / 2 };
+  const right = { from: map.w / 2, to: map.w };
+  const column = (text: string, half: { from: number; to: number }): number =>
+    clearLabelColumn(map, terrain, (half.from + half.to) / 2, (text.length * LETTER_EM * size) / S + 0.5, half);
+  const halo = { stroke: UNEXPLORED, "stroke-width": 5 * k, "paint-order": "stroke", "stroke-linejoin": "round" };
+  const label = (x: number, y: number, px: number, text: string, cls: string): SVGTextElement =>
+    sv("text", { x: x * S, y: y * k, "text-anchor": "middle", "font-size": px * k, fill: INK_SOFT, class: cls, ...halo }, text);
+  const own = `${who.own} half`;
+  const enemy = `${who.enemy} half`;
+  const enemyX = column(enemy, ownLeft ? right : left);
   const enemyExplored = [...view.explored].some((i) => (i % map.w < map.w / 2) !== ownLeft);
   return sv(
     "g",
     { class: "strategic-labels" },
-    label(ownLeft ? W / 4 : (3 * W) / 4, 30, 24, `${who.own} half`, "strategic-half-label"),
-    label(enemyX, 30, 24, `${who.enemy} half`, "strategic-half-label"),
+    label(column(own, ownLeft ? left : right), 30, 24, own, "strategic-half-label"),
+    label(enemyX, 30, 24, enemy, "strategic-half-label"),
     enemyExplored ? null : label(enemyX, 54, 18, "Blank paper, explore to draw it in", "strategic-half-hint"),
   );
 }

@@ -214,7 +214,6 @@ export function render(): void {
       node = strategicScreen(game, {
         menuButton,
         setGame,
-        render,
         overlay: () => (ui.menu !== "closed" ? menuOverlay() : null),
         showResults: () => {
           ui.endShown = true;

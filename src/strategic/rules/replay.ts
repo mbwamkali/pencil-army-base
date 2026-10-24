@@ -1,10 +1,10 @@
 import type { UnitType } from "../../rules/constants.ts";
 import type { Game, PlayerIndex } from "../../rules/game.ts";
 import { rectOf, sizeOf, type Unit } from "../../rules/units.ts";
-import { centreOf, footprintAt } from "./board.ts";
+import { DIRECTIONS, centreOf, footprintAt } from "./board.ts";
 import { BASE_GRID, HP, hpLeft } from "./constants.ts";
 import { unitSeen, visibleSquares } from "./fog.ts";
-import { mapOf, squareIndex } from "./maps.ts";
+import { isBlocked, mapOf, squareIndex } from "./maps.ts";
 import type { MapShot, Point, Replay, ReplayMark, ReplayStep, StrategicEvent, StrategicMap, StrategicState, StrategicView } from "./types.ts";
 import { drawnUnit, revealView, shotForViewer, strategicView, turnNumber } from "./view.ts";
 
@@ -351,16 +351,51 @@ function seeEnemyMelee(e: Extract<StrategicEvent, { kind: "melee" }>, armies: Ar
 }
 
 /**
- * A new enemy infantry, shown only when it appeared on a square the viewer could see and the fort
- * that sent it out was in sight too, or already found. Spawn squares touch the fort, so "the enemy
- * fort sent out infantry" beside a fort still in the fog would tell the viewer where it stands, which
- * the turn screen never does. Left out, the newcomer simply turns up in the next frames as an enemy
- * in sight, just as it does on the turn screen.
+ * The square a newcomer seems to have walked in from when the fort that sent it out is hidden: of
+ * the open squares around it that the viewer cannot see, the one furthest from the middle of the map
+ * (deeper in the enemy's side, where enemy infantry come from; the first in DIRECTIONS order on a
+ * tie). Chosen from what the viewer knows only, so it says nothing about where the fort is. Null when
+ * every square around is in sight or terrain, which cannot happen while the fort touching it is
+ * hidden.
+ */
+export function fogSquareBeside(at: Point, visible: ReadonlySet<number>, map: StrategicMap): Point | null {
+  const middle = { x: map.w / 2, y: map.h / 2 };
+  let best: Point | null = null;
+  let bestD = -1;
+  for (const d of DIRECTIONS) {
+    const p = { x: at.x + d.x, y: at.y + d.y };
+    if (p.x < 0 || p.y < 0 || p.x >= map.w || p.y >= map.h) continue;
+    if (isBlocked(map, p.x, p.y) || visible.has(squareIndex(map, p.x, p.y))) continue;
+    const dist = Math.hypot(p.x + 0.5 - middle.x, p.y + 0.5 - middle.y);
+    if (dist > bestD) {
+      best = p;
+      bestD = dist;
+    }
+  }
+  return best;
+}
+
+/**
+ * A new enemy infantry on a square the viewer could see. With the fort that sent it out in sight,
+ * or already found, it is shown as what it is: "The enemy fort sent out infantry". Otherwise saying
+ * so would tell the viewer the hidden fort touches that square, and so would the newcomer simply
+ * popping up with no step (every other way onto a watched square has one). So it reads exactly as
+ * that infantry walking in from a square in the fog beside it would (fogSquareBeside): "Enemy
+ * infantry came out of the fog", with the same short track and slide.
  */
 function seeEnemySpawn(e: Extract<StrategicEvent, { kind: "spawn" }>, armies: Armies, visible: ReadonlySet<number>, lens: Lens): Seen | null {
   if (!visible.has(squareIndex(lens.map, e.at.x, e.at.y))) return null;
   const fort = armies[e.player].find((u) => u.type === "fort");
-  if (!lens.baseKnown && !(fort && unitSeen(fort, visible, lens.map))) return null;
+  if (!lens.baseKnown && !(fort && unitSeen(fort, visible, lens.map))) {
+    const from = fogSquareBeside(e.at, visible, lens.map);
+    if (!from) return null;
+    // Judged by the very code a real walk goes through, with the newcomer standing there beforehand.
+    const newcomer: Unit = { id: e.unitId, type: "infantry", x: from.x, y: from.y, upright: false, hits: 0 };
+    const withNewcomer: Armies = [...armies];
+    withNewcomer[e.player] = [...armies[e.player], newcomer];
+    const walk: Extract<StrategicEvent, { kind: "move" }> = { kind: "move", turn: e.turn, player: e.player, unitId: e.unitId, type: "infantry", from, to: { ...e.at }, riders: [] };
+    return seeEnemyMoveEvent(walk, withNewcomer, visible, lens);
+  }
   return {
     part: "enemy",
     group: null,
@@ -475,9 +510,10 @@ function finishStep(p: Pending, fallback: Point): ReplayStep {
 /**
  * What the viewer missed since their last turn, as far as their own units could see it: the enemy's
  * last turn (moves in sight, shots that hurt them or fell on ground they know, blows on their units,
- * new infantry in sight beside a fort they can see or have found), then their own automatic start of
- * turn. Each event is judged with the armies as they stood just before it, so a unit destroyed part
- * way through stops seeing from then on. Closed (no steps) for an old save without starting armies,
+ * new infantry in sight, as sent out by a fort they can see or have found, else as walking in out of
+ * the fog), then their own automatic start of turn. Each event is judged with the armies as they
+ * stood just before it, so a unit destroyed part way through stops seeing from then on. Closed (no
+ * steps) for an old save without starting armies,
  * outside a turn, when it is not the viewer's turn, or once the viewer has given an order. `open`
  * says whether it is worth showing: the enemy did something the viewer saw, or the viewer's infantry
  * fought (marching and new infantry alone happen every turn and never open it).

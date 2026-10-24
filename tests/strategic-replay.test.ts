@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { Rng, confirmHandoff, createGame, finishBuild, randomLayout, rectOf, typeOfId, type Game, type PlayerIndex, type Unit } from "../src/rules/index.ts";
+import { Rng, confirmHandoff, rectOf, typeOfId, type Game, type PlayerIndex, type Unit } from "../src/rules/index.ts";
 import {
   BASE_GRID,
+  NEW_GAME_MAP_IDS,
   aimProblem,
   armiesAt,
   beginStrategicTurn,
@@ -12,10 +13,10 @@ import {
   endStrategicTurn,
   fireArtillery,
   fireTank,
+  fogSquareBeside,
   footprintAt,
   isAlive,
   lookAround,
-  mapOf,
   matchReplay,
   moveUnit,
   pointInSight,
@@ -37,30 +38,18 @@ import {
   type StrategicEvent,
   type StrategicView,
 } from "../src/strategic/rules/index.ts";
-
-const medium = mapOf("medium-1");
-
-function ok(r: { ok: boolean; game?: Game; reason?: string }): Game {
-  if (!r.ok) throw new Error(r.reason);
-  return r.game!;
-}
+import { builtGame, builtOnMedium, mapOfGame, medium, ok } from "./strategic-fixtures.ts";
 
 const other = (p: PlayerIndex): PlayerIndex => (p === 0 ? 1 : 0);
 
 /** A unit at a map square; the type comes from the id ("tank-2" is a tank). */
 const unit = (id: string, x: number, y: number, hits = 0, upright = false): Unit => ({ id, type: typeOfId(id) as Unit["type"], x, y, upright, hits });
 
-/** Both bases built at random, waiting on the handoff screen before player 1's first turn. */
-function built(seed: number): Game {
-  let g = createGame({ seed, mode: "strategic" });
-  g = randomLayout(g, 0);
-  g = ok(finishBuild(g, 0));
-  g = ok(confirmHandoff(g));
-  g = randomLayout(g, 1);
-  return ok(finishBuild(g, 1));
-}
+/** Both bases built at random on a new-game map, waiting on the handoff screen before player 1's first turn. */
+const built = builtGame;
 
-const fresh = ok(confirmHandoff(built(1)));
+/** Player 1's first turn on Medium 1 with the stage 3 spots, the ground the hand-placed scenarios are drawn on. */
+const fresh = ok(confirmHandoff(builtOnMedium(1)));
 
 /**
  * A Strategic game on the Medium map with hand-placed armies, recorded as the starting armies so
@@ -98,7 +87,7 @@ function enemyAuto(g: Game): Game {
 /** End the turn and let the other player tap Start: their automatic phase runs. */
 const handover = (g: Game): Game => ok(confirmHandoff(ok(endStrategicTurn(g))));
 
-/** The widest shake on Medium. */
+/** The widest shake there is. */
 const WIDEST_SHAKE = shakeRadius(Math.hypot(medium.w, medium.h));
 
 /** The first Rng state whose shell barely drifts (under a tenth of a square at any range), so a test can aim exactly. */
@@ -446,20 +435,42 @@ describe("replayFor: new infantry", () => {
     expect(q.open).toBe(false); // the viewer's own fort sends out infantry every turn
   });
 
-  it("keeps quiet about a spawn beside a fort still in the fog, which would give the fort away", () => {
+  it("shows a spawn beside a fort still in the fog as infantry coming out of the fog, never as a spawn", () => {
     // The tank sees the spawn square (17,9) but not one square of the fort behind it.
     const tank = unit("tank-1", 19, 12);
     const g = handover(enemyAuto(scenario(enemy, viewer([tank]), 3)));
     const fort = g.players[0].units.find((u) => u.type === "fort")!;
-    expect(visibleSquares([tank], medium).has(9 * medium.w + 17)).toBe(true);
-    expect(unitSeen(fort, visibleSquares([tank], medium), medium)).toBe(false);
+    const sight = visibleSquares(g.players[1].units, medium);
+    expect(sight.has(9 * medium.w + 17)).toBe(true);
+    expect(unitSeen(fort, sight, medium)).toBe(false);
     expect(strategicView(g, 1).enemyBase).toBeNull();
     const r = replayFor(g);
-    expect(texts(r)).toEqual(["Your fort sent out infantry 3"]);
-    expect(r.steps.filter((st) => st.part === "enemy")).toEqual([]);
-    expect(r.open).toBe(false);
-    // The newcomer still shows in the frame as an enemy in sight, as on the turn screen.
+    // "The enemy fort sent out infantry" would place the fort; so would the newcomer popping up with
+    // no step, since anything else reaching a watched square gets one. It walks in instead.
+    expect(texts(r)).toEqual(["Enemy infantry came out of the fog", "Your fort sent out infantry 3"]);
+    expect(r.steps[0]!.part).toBe("enemy");
+    expect(r.steps[0]!.marks.map((m) => m.kind)).toEqual(["track"]);
+    expect(r.open).toBe(true);
+    // It seems to come from the open square in the fog beside it furthest from the middle of the map.
+    const from = fogSquareBeside({ x: 17, y: 9 }, sight, medium);
+    expect(from).toEqual({ x: 16, y: 8 });
+    expect(r.steps[0]!.moves).toHaveLength(1);
+    expect(r.steps[0]!.moves[0]!.to).toEqual({ x: 17, y: 9 });
+    expect(r.steps[0]!.moves[0]!.from.x).toBeLessThan(17);
+    // Not drawn before it walks in; in sight from then on, as on the turn screen.
+    expect(r.before.enemies).toEqual([]);
     expect(r.steps[0]!.frame.enemies.map((e) => e.id)).toEqual(["infantry-3"]);
+  });
+
+  it("finds a square in the fog beside a spawn only among open squares out of sight", () => {
+    const all = new Set(Array.from({ length: medium.w * medium.h }, (_, i) => i));
+    expect(fogSquareBeside({ x: 10, y: 10 }, all, medium)).toBeNull();
+    // Only (11,11) is out of sight: that is the one, wherever the middle is.
+    const one = new Set(all);
+    one.delete(11 * medium.w + 11);
+    expect(fogSquareBeside({ x: 10, y: 10 }, one, medium)).toEqual({ x: 11, y: 11 });
+    // Off the paper never counts.
+    expect(fogSquareBeside({ x: 0, y: 0 }, new Set([1, medium.w, medium.w + 1]), medium)).toBeNull();
   });
 
   it("shows a spawn beside a fort the viewer found earlier, even with the fort out of sight now", () => {
@@ -552,12 +563,20 @@ const OFFSETS: Point[] = [
 ];
 
 /**
+ * From this Game.turn on the artillery shells the enemy fort itself (the test player may look where
+ * the real player cannot), so that some games end with a fallen fort for the match replay.
+ */
+const ENDGAME = 31;
+
+/**
  * A simple fixed policy: each tank fires at an enemy in range (a fort last), or advances and then
- * fires; the truck advances (riders and all); the artillery shells a point offset from the enemy base.
+ * fires; the truck advances (riders and all); the artillery shells a point offset from the enemy
+ * base, and the enemy fort from ENDGAME on.
  */
 function playTurn(game: Game): Game {
   let g = game;
   const p = g.current;
+  const map = mapOfGame(g);
   for (const id of g.players[p].units.filter((u) => u.type === "tank" && isAlive(u)).map((u) => u.id)) {
     if (g.phase !== "turn") return g;
     if (tankTargets(g, id).length === 0) g = advance(g, id);
@@ -570,7 +589,9 @@ function playTurn(game: Game): Game {
     if (g.phase !== "turn") return g;
     const goal = goalOf(g);
     const o = OFFSETS[g.turn % OFFSETS.length]!;
-    const aim = { x: Math.max(0, Math.min(medium.w, goal.x + o.x)), y: Math.max(0, Math.min(medium.h, goal.y + o.y)) };
+    const fort = g.players[other(p)].units.find((u) => u.type === "fort" && isAlive(u));
+    const offset = { x: Math.max(0, Math.min(map.w, goal.x + o.x)), y: Math.max(0, Math.min(map.h, goal.y + o.y)) };
+    const aim = g.turn >= ENDGAME && fort ? centre(fort) : offset;
     if (aimProblem(g, id, aim) === null) g = ok(fireArtillery(g, id, aim));
   }
   return g;
@@ -614,6 +635,7 @@ const liveArmies = (g: Game) => [g.players[0].units, g.players[1].units];
  */
 function leaks(g: Game, r: Replay, viewer: PlayerIndex): string[] {
   const s = g.strategic!;
+  const map = mapOfGame(g);
   const enemy = other(viewer);
   const live = strategicView(g, viewer);
   const problems: string[] = [];
@@ -622,24 +644,24 @@ function leaks(g: Game, r: Replay, viewer: PlayerIndex): string[] {
   const from = first < 0 ? s.events.length : first;
   // The armies at every moment of the replay's window, keyed by how many events had happened.
   const moments = new Map(Array.from({ length: s.events.length - from + 1 }, (_, k) => [from + k, armiesAt(g, from + k)!] as const));
-  const sightAt = new Map([...moments].map(([k, armies]) => [k, visibleSquares(armies[viewer], medium)] as const));
+  const sightAt = new Map([...moments].map(([k, armies]) => [k, visibleSquares(armies[viewer], map)] as const));
   // Where each enemy unit stood, with its hits, at some moment one of the viewer's units saw it.
   const sightings = new Set<string>();
   const inSightEver = new Set<number>();
   for (const [k, armies] of moments) {
     const visible = sightAt.get(k)!;
     for (const i of visible) inSightEver.add(i);
-    for (const u of armies[enemy]) if (unitSeen(u, visible, medium)) sightings.add(`${u.id}@${u.x},${u.y}:${u.hits}`);
+    for (const u of armies[enemy]) if (unitSeen(u, visible, map)) sightings.add(`${u.id}@${u.x},${u.y}:${u.hits}`);
   }
   const liveShotIds = new Set(live.shots.map((shot) => shot.id));
   const checkFrame = (frame: StrategicView, label: string) => {
     if (frame.viewer !== viewer) fail(`${label}: wrong viewer`);
-    const own = visibleSquares(frame.units.map(asUnit), medium);
+    const own = visibleSquares(frame.units.map(asUnit), map);
     if (own.size !== frame.visible.size || [...own].some((i) => !frame.visible.has(i))) fail(`${label}: visible is not what the viewer's units see`);
     if ([...frame.visible].some((i) => !inSightEver.has(i))) fail(`${label}: a square in sight that was never in sight`);
     for (const e of frame.enemies) {
       if (!e.current) fail(`${label}: a last-seen mark ${e.id}`);
-      if (!unitSeen(e, frame.visible, medium)) fail(`${label}: ${e.id} drawn out of sight`);
+      if (!unitSeen(e, frame.visible, map)) fail(`${label}: ${e.id} drawn out of sight`);
       if (!sightings.has(`${e.id}@${e.x},${e.y}:${e.maxHp - e.hp}`)) fail(`${label}: ${e.id} at ${e.x},${e.y} was never seen like that`);
     }
     for (const shot of frame.shots) if (!liveShotIds.has(shot.id)) fail(`${label}: shot ${shot.id} the turn screen hides`);
@@ -654,7 +676,7 @@ function leaks(g: Game, r: Replay, viewer: PlayerIndex): string[] {
     const attacker = armies[e.player].find((u) => u.id === e.unitId)!;
     const target = armies[other(e.player)].find((u) => u.id === e.targetId)!;
     const mid = { x: (centre(attacker).x + centre(target).x) / 2, y: (centre(attacker).y + centre(target).y) / 2 };
-    const at = e.player === viewer || unitSeen(attacker, sightAt.get(i)!, medium) ? mid : centre(target);
+    const at = e.player === viewer || unitSeen(attacker, sightAt.get(i)!, map) ? mid : centre(target);
     clashes.push(`${at.x},${at.y}`);
   });
   r.steps.forEach((step, n) => {
@@ -664,31 +686,31 @@ function leaks(g: Game, r: Replay, viewer: PlayerIndex): string[] {
     for (const m of step.marks) {
       if (m.kind === "track") {
         if (m.points.length < 2) fail(`${label}: a track of one point`);
-        if (m.owner === enemy && m.points.some((p) => !pointInSight(p, step.frame.visible, medium))) fail(`${label}: an enemy track point out of sight`);
+        if (m.owner === enemy && m.points.some((p) => !pointInSight(p, step.frame.visible, map))) fail(`${label}: an enemy track point out of sight`);
       } else if (m.kind === "shot") {
         shotIds.push(m.shotId);
         const shot = s.shots.find((x) => x.id === m.shotId)!;
-        if (shot.by !== enemy || shotForViewer(shot, viewer, live.explored, medium) === null) fail(`${label}: shot ${m.shotId} the turn screen hides`);
+        if (shot.by !== enemy || shotForViewer(shot, viewer, live.explored, map) === null) fail(`${label}: shot ${m.shotId} the turn screen hides`);
         if (m.from !== null) {
           const at = s.events.findIndex((e) => e.kind === "shot" && e.shotId === m.shotId);
           const shooter = moments.get(at)![enemy].find((u) => u.id === shot.unitId)!;
-          if (!unitSeen(shooter, sightAt.get(at)!, medium)) fail(`${label}: a line from a shooter out of sight`);
+          if (!unitSeen(shooter, sightAt.get(at)!, map)) fail(`${label}: a line from a shooter out of sight`);
           if (m.from.x !== centre(shooter).x || m.from.y !== centre(shooter).y) fail(`${label}: the line starts away from the shooter`);
         } else if (step.text.startsWith("Enemy tank")) fail(`${label}: names a shooter it could not see`);
       } else if (m.kind === "clash") {
         if (!clashes.includes(`${m.at.x},${m.at.y}`)) fail(`${label}: a clash at ${m.at.x},${m.at.y}`);
       } else if (step.part === "enemy") {
-        if (!step.frame.visible.has(Math.floor(m.at.y) * medium.w + Math.floor(m.at.x))) fail(`${label}: a spawn out of sight`);
+        if (!step.frame.visible.has(Math.floor(m.at.y) * map.w + Math.floor(m.at.x))) fail(`${label}: a spawn out of sight`);
         // A spawn square touches the fort, so a spawn may only be told beside a fort in sight or already found.
         const fort = moments.get(from)![enemy].find((u) => u.type === "fort");
-        if (!live.enemyBase && !(fort && unitSeen(fort, step.frame.visible, medium))) fail(`${label}: a spawn gives away a fort out of sight`);
+        if (!live.enemyBase && !(fort && unitSeen(fort, step.frame.visible, map))) fail(`${label}: a spawn gives away a fort out of sight`);
       }
     }
     for (const mv of step.moves) {
       if (mv.owner !== enemy) continue;
       const u = moments.get(from)![enemy].find((v) => v.id === mv.unitId) ?? { type: "infantry" as const, upright: false };
       const { w, h } = rectOf({ ...u, x: 0, y: 0 });
-      for (const p of [mv.from, mv.to]) if (!pointInSight({ x: p.x + w / 2, y: p.y + h / 2 }, step.frame.visible, medium)) fail(`${label}: ${mv.unitId} slides through the fog`);
+      for (const p of [mv.from, mv.to]) if (!pointInSight({ x: p.x + w / 2, y: p.y + h / 2 }, step.frame.visible, map)) fail(`${label}: ${mv.unitId} slides through the fog`);
     }
     if (step.frame.lastShot && !shotIds.includes(step.frame.lastShot.id)) fail(`${label}: lastShot is not this step's shot`);
     // About 34 characters; the longest forms ("Infantry 12 hit the enemy fort: 4 of 6 left") run to 43.
@@ -703,10 +725,11 @@ describe("simulated games", () => {
     games = SEEDS.map(play);
   }, 180_000);
 
-  it("plays at least 20 seeded games, nearly all for 40 Game.turns", () => {
+  it("plays at least 20 seeded games on the new-game maps, nearly all past 30 Game.turns, some to a fallen fort", () => {
     expect(games).toHaveLength(20);
-    expect(games.filter((p) => p.starts.length >= TURNS).length).toBeGreaterThanOrEqual(18);
+    expect(games.filter((p) => p.starts.length >= ENDGAME).length).toBeGreaterThanOrEqual(18);
     expect(games.some((p) => p.last.phase === "over")).toBe(true);
+    for (const p of games) expect(NEW_GAME_MAP_IDS).toContain(p.last.strategic!.map);
   });
 
   it("rebuilds every moment exactly from the starting armies and the events (the fold invariant)", () => {
@@ -731,7 +754,7 @@ describe("simulated games", () => {
         // The player who is not on gets nothing, and the map they would get still hides the enemy.
         const off = replayFor(g, other(viewer));
         expect(off).toMatchObject({ steps: [], open: false });
-        for (const e of off.before.enemies) expect(unitSeen(e, off.before.visible, medium)).toBe(true);
+        for (const e of off.before.enemies) expect(unitSeen(e, off.before.visible, mapOfGame(g))).toBe(true);
         // The last frame always shows the viewer's own units exactly as the turn screen does.
         if (r.steps.length > 0) expect(r.steps.at(-1)!.frame.units).toEqual(strategicView(g, viewer).units);
       }
@@ -762,7 +785,7 @@ describe("simulated games", () => {
       expect(tracksOf(step)).toHaveLength(moved.length);
       expect(step.marks.filter((m) => m.kind === "shot")).toHaveLength(events.filter((e) => e.kind === "shot").length);
       expect(step.frame.visible.size).toBe(0);
-      expect(step.frame.explored.size).toBe(medium.w * medium.h);
+      expect(step.frame.explored.size).toBe(mapOfGame(finished).w * mapOfGame(finished).h);
       expect(step.frame.lastShot).toBeNull();
       expect(step.part).toBe("turn");
     }

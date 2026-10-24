@@ -29,6 +29,10 @@ export interface Point {
   y: number;
 }
 
+/**
+ * A hand-made, point-symmetric map. It lists no base spots: each player's base lands at a random
+ * spot in their own half, drawn by a rule (validBaseSpots in setup.ts).
+ */
 export interface StrategicMap {
   id: string;
   name: string;
@@ -37,11 +41,6 @@ export interface StrategicMap {
   w: number;
   h: number;
   terrain: TerrainFeature[];
-  /**
-   * Where player 1's base (BASE_GRID squares) may be dropped, as top-left squares. Player 2 gets the
-   * same spot turned half a circle (maps are point-symmetric), so both sides are fair.
-   */
-  baseSpots: Point[];
 }
 
 /** An enemy unit as one player saw it: where it was and what state it was in on a given turn. */

@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   confirmHandoff,
   createGame,
-  finishBuild,
-  randomLayout,
   rectOf,
   rectsOverlap,
   typeOfId,
@@ -21,7 +19,6 @@ import {
   isAlive,
   ridersFor,
   isBlocked,
-  mapOf,
   squareIndex,
   squaresOfRect,
   terrainSquares,
@@ -31,24 +28,10 @@ import {
   type StrategicMap,
 } from "../src/strategic/rules/index.ts";
 import { beginStrategicTurn, chooseMeleeTarget, infantryStep, nextStepToward, spawnInfantry } from "../src/strategic/rules/auto.ts";
+import { builtGame, builtOnMedium, mapOfGame, medium, ok } from "./strategic-fixtures.ts";
 
-const medium = mapOf("medium-1");
-
-function ok(r: { ok: boolean; game?: Game; reason?: string }): Game {
-  if (!r.ok) throw new Error(r.reason);
-  return r.game!;
-}
-
-/** A two-player Strategic game with random bases, player 1 looking at their first turn. */
-function inTurn(seed: number): Game {
-  let g = createGame({ seed, mode: "strategic" });
-  g = randomLayout(g, 0);
-  g = ok(finishBuild(g, 0));
-  g = ok(confirmHandoff(g));
-  g = randomLayout(g, 1);
-  g = ok(finishBuild(g, 1));
-  return ok(confirmHandoff(g));
-}
+/** A two-player Strategic game on a new-game map with random bases, player 1 looking at their first turn. */
+const inTurn = (seed: number): Game => ok(confirmHandoff(builtGame(seed)));
 
 /** A unit at a map square; the type comes from the id ("tank-2" is a tank). */
 const unit = (id: string, x: number, y: number, hits = 0, upright = false): Unit => ({ id, type: typeOfId(id) as UnitType, x, y, upright, hits });
@@ -57,7 +40,8 @@ const at = (u: Unit | undefined): Point => ({ x: u?.x ?? -1, y: u?.y ?? -1 });
 const find = (g: Game, p: PlayerIndex, id: string) => g.players[p].units.find((u) => u.id === id);
 const events = (g: Game): StrategicEvent[] => g.strategic!.events;
 
-const fresh = inTurn(1);
+/** Player 1's first turn on Medium 1 with the stage 3 spots, the ground the hand-placed tests below are drawn on. */
+const fresh = ok(confirmHandoff(builtOnMedium(1)));
 
 /**
  * A Strategic game on the Medium map with hand-placed units. Player 1's base is at (2,7) and
@@ -121,7 +105,6 @@ describe("nextStepToward", () => {
     w: 10,
     h: 6,
     terrain: [{ kind: "hill", cx: 5.5, cy: 2.5, rx: 0.9, ry: 2.6 }],
-    baseSpots: [{ x: 0, y: 0 }],
   };
   // A 10 x 6 map with a 3 x 3 hill at x 6-8, y 1-3.
   const blob: StrategicMap = { ...corridor, id: "test-blob", terrain: [{ kind: "hill", cx: 7.5, cy: 2.5, rx: 1.6, ry: 1.6 }] };
@@ -282,12 +265,41 @@ describe("automatic infantry", () => {
     expect(new Set(trail.map((p) => `${p.x},${p.y}`)).size).toBe(trail.length); // never doubles back
   });
 
-  it("heads for the enemy base once the whole enemy half is explored", () => {
-    // The base centre is (32,10); from (29,7) the only shortest way to touch it starts diagonally.
-    const g = scenario([unit("infantry-1", 29, 7)], []);
+  it("heads for the middle of the enemy half, not the hidden enemy base, once the whole enemy half is explored", () => {
+    // The enemy half's middle is (30,10), a 2 x 2 block over squares 29-30 x 9-10; from (25,5) the
+    // only shortest way to touch it is three steps down and to the right.
+    const g = scenario([unit("infantry-1", 25, 5)], []);
     g.strategic!.explored[0] = encodeExplored(new Set(Array.from({ length: medium.w * medium.h }, (_, i) => i)), medium);
-    const a = beginStrategicTurn(g);
-    expect(at(find(a, 0, "infantry-1"))).toEqual({ x: 30, y: 8 });
+    expect(at(find(beginStrategicTurn(g), 0, "infantry-1"))).toEqual({ x: 26, y: 6 });
+    // Wherever the enemy base really is, the walk is the same.
+    for (const base of [{ x: 24, y: 8 }, { x: 27, y: 1 }, { x: 26, y: 13 }]) {
+      const moved = structuredClone(g);
+      moved.strategic!.bases[1] = base;
+      expect(at(find(beginStrategicTurn(moved), 0, "infantry-1"))).toEqual({ x: 26, y: 6 });
+    }
+    // Player 2's infantry head for the middle of the left half, (10,10), the same way turned round.
+    const theirs = scenario([], [unit("infantry-1", 14, 14)], 2);
+    theirs.strategic!.explored[1] = encodeExplored(new Set(Array.from({ length: medium.w * medium.h }, (_, i) => i)), medium);
+    expect(at(find(beginStrategicTurn(theirs), 1, "infantry-1"))).toEqual({ x: 13, y: 13 });
+  });
+
+  it("plans its walk round only the units its side knows of, so its route never bends round an enemy in the fog", () => {
+    const fort = unit("fort-1", 34, 11);
+    const known = (theirs: Unit[]): Game => {
+      const g = scenario([unit("infantry-1", 14, 14)], theirs);
+      g.strategic!.lastSeen[0] = [{ id: "fort-1", type: "fort", x: 34, y: 11, upright: false, state: "normal", hp: 6, turn: 0 }];
+      return g;
+    };
+    // An upright enemy wall five squares off (squares 19 x 12-13), out of the infantry's sight.
+    const hiddenWall = unit("wall-1", 19, 12, 0, true);
+    const g = known([fort, hiddenWall]);
+    expect(visibleSquares(g.players[0].units, medium).has(12 * medium.w + 19)).toBe(false);
+    const open = at(find(beginStrategicTurn(known([fort])), 0, "infantry-1"));
+    expect(open).toEqual({ x: 15, y: 14 });
+    expect(at(find(beginStrategicTurn(g), 0, "infantry-1"))).toEqual(open);
+    // Planned round every unit on the map, the hidden wall would have turned that first step.
+    const all = [...g.players[0].units, ...g.players[1].units];
+    expect(nextStepToward(medium, all, g.players[0].units[0]!, rectOf(fort))).toEqual({ x: 15, y: 15 });
   });
 
   it("waits beside its own truck for a lift, but still fights and still marches when the truck is further off", () => {
@@ -352,10 +364,10 @@ describe("automatic infantry", () => {
 });
 
 describe("fort spawns", () => {
-  const myFort = unit("fort-1", 5, 8); // squares 5-7 x 8-10; the enemy base centre is (32, 10)
-  const theirFort = unit("fort-1", 34, 11); // squares 34-36 x 11-13; our base centre is (8, 10)
+  const myFort = unit("fort-1", 5, 8); // squares 5-7 x 8-10; the middle of the map is (20, 10)
+  const theirFort = unit("fort-1", 34, 11); // squares 34-36 x 11-13
 
-  it("sends nobody on the owner's first turn and one infantry a turn from the second, nearest the enemy base", () => {
+  it("sends nobody on the owner's first turn and one infantry a turn from the second, nearest the middle of the map", () => {
     const first = beginStrategicTurn(scenario([myFort], [theirFort], 1));
     expect(first.players[0].units).toHaveLength(1);
     expect(first.strategic!.nextInfantry).toEqual([3, 3]);
@@ -365,12 +377,26 @@ describe("fort spawns", () => {
     expect(find(second, 0, "infantry-3")).toEqual(unit("infantry-3", 8, 9));
     expect(second.strategic!.nextInfantry).toEqual([4, 3]);
     expect(events(second)).toEqual([{ kind: "spawn", turn: 3, player: 0, unitId: "infantry-3", at: { x: 8, y: 9 } }]);
-    // Player 2: nothing on Game.turn 2 (their first), one on turn 4, on their side facing our base.
+    // Player 2: nothing on Game.turn 2 (their first), one on turn 4, on their side facing the middle.
     expect(beginStrategicTurn(scenario([myFort], [theirFort], 2)).players[1].units).toHaveLength(1);
     const theirs = beginStrategicTurn(scenario([myFort], [theirFort], 4));
     expect(find(theirs, 1, "infantry-3")).toEqual(unit("infantry-3", 33, 10));
     expect(theirs.strategic!.nextInfantry).toEqual([3, 4]);
     expect(theirs.players[0].units).toHaveLength(1);
+  });
+
+  it("faces the middle of the map wherever the enemy base is, skipping terrain", () => {
+    // A fort up by the hill at the top of the centre line: squares 14-16 x 1-3. The nearest ring
+    // squares to the middle, (17,3) and (17,4), are hill, so the newcomer takes (16,4) below.
+    const fort = unit("fort-1", 14, 1);
+    expect(isBlocked(medium, 17, 3) && isBlocked(medium, 17, 4)).toBe(true);
+    const g = scenario([fort], [theirFort], 3);
+    expect(at(find(spawnInfantry(g, 0), 0, "infantry-3"))).toEqual({ x: 16, y: 4 });
+    for (const base of [{ x: 24, y: 8 }, { x: 27, y: 1 }, { x: 26, y: 13 }, { x: 2, y: 1 }]) {
+      const moved = structuredClone(g);
+      moved.strategic!.bases[1] = base;
+      expect(spawnInfantry(moved, 0).players[0].units).toEqual(spawnInfantry(g, 0).players[0].units);
+    }
   });
 
   it("takes the next free ring square when the nearest is taken, and numbers infantry on from 3", () => {
@@ -454,9 +480,10 @@ describe("beginStrategicTurn", () => {
         expect(g.turn).toBe(turn);
         g = beginStrategicTurn(g);
         expect(g.strategic!.autoDoneTurn).toBe(turn);
-        expectSound(g);
-        const explored = decodeExplored(g.strategic!.explored[g.current], medium);
-        for (const i of visibleSquares(g.players[g.current].units, medium)) expect(explored.has(i)).toBe(true);
+        const map = mapOfGame(g);
+        expectSound(g, map);
+        const explored = decodeExplored(g.strategic!.explored[g.current], map);
+        for (const i of visibleSquares(g.players[g.current].units, map)) expect(explored.has(i)).toBe(true);
         g = ok(endStrategicTurn(g));
       }
       return g;

@@ -18,6 +18,7 @@ import {
 } from "../src/rules/index.ts";
 import {
   BASE_GRID,
+  NEW_GAME_MAP_IDS,
   SIGHT,
   STRATEGIC_ARMY,
   decodeExplored,
@@ -32,9 +33,12 @@ import {
   strategicView,
   turnNumber,
   unitSeen,
+  validBaseSpots,
   visibleSquares,
 } from "../src/strategic/rules/index.ts";
+import { mapOfGame } from "./strategic-fixtures.ts";
 
+/** Medium 1, for the sight and encoding tests that need known ground. Games themselves land on any new-game map. */
 const medium = mapOf("medium-1");
 
 function ok(r: { ok: boolean; game?: Game; reason?: string }): Game {
@@ -201,9 +205,10 @@ describe("startStrategic", () => {
     expect(after.phase).toBe("handoff");
     expect(after.handoff).toEqual({ to: after.firstShooter, then: "turn" });
     const s = after.strategic!;
-    expect(s.map).toBe("medium-1");
-    expect(s.bases[0]).toEqual({ x: 2, y: 7 });
-    expect(s.bases[1]).toEqual({ x: medium.w - BASE_GRID.w - 2, y: medium.h - BASE_GRID.h - 7 });
+    expect(NEW_GAME_MAP_IDS).toContain(s.map);
+    // Each base at a random valid spot of its own half (tests/strategic-setup.test.ts checks the rules over 300 seeds).
+    expect(validBaseSpots(mapOfGame(after), 0)).toContainEqual(s.bases[0]);
+    expect(validBaseSpots(mapOfGame(after), 1)).toContainEqual(s.bases[1]);
     expect(s.lastSeen).toEqual([[], []]);
     expect(after.rngState).not.toBe(before.rngState);
   });
@@ -229,11 +234,12 @@ describe("startStrategic", () => {
   it("starts each player knowing their whole base plus what their units can see", () => {
     const { after } = builtStrategic(7);
     const s = after.strategic!;
+    const map = mapOfGame(after);
     for (const p of [0, 1] as PlayerIndex[]) {
-      const explored = decodeExplored(s.explored[p], medium);
-      for (const i of squaresOfRect({ ...s.bases[p], ...BASE_GRID }, medium)) expect(explored.has(i)).toBe(true);
-      for (const i of visibleSquares(after.players[p].units, medium)) expect(explored.has(i)).toBe(true);
-      expect(explored.size).toBeLessThan((medium.w * medium.h) / 2);
+      const explored = decodeExplored(s.explored[p], map);
+      for (const i of squaresOfRect({ ...s.bases[p], ...BASE_GRID }, map)) expect(explored.has(i)).toBe(true);
+      for (const i of visibleSquares(after.players[p].units, map)) expect(explored.has(i)).toBe(true);
+      expect(explored.size).toBeLessThan((map.w * map.h) / 2);
     }
   });
 
@@ -313,9 +319,10 @@ describe("Strategic turns", () => {
     fort.x = 15;
     fort.y = 1;
     const e = ok(endStrategicTurn(moved));
-    const explored = decodeExplored(e.strategic!.explored[0], medium);
-    for (const i of visibleSquares(moved.players[0].units, medium)) expect(explored.has(i)).toBe(true);
-    for (const i of decodeExplored(g.strategic!.explored[0], medium)) expect(explored.has(i)).toBe(true);
+    const map = mapOfGame(g);
+    const explored = decodeExplored(e.strategic!.explored[0], map);
+    for (const i of visibleSquares(moved.players[0].units, map)) expect(explored.has(i)).toBe(true);
+    for (const i of decodeExplored(g.strategic!.explored[0], map)) expect(explored.has(i)).toBe(true);
     expect(e.strategic!.explored[1]).toBe(g.strategic!.explored[1]);
   });
 
@@ -336,19 +343,21 @@ describe("strategicView", () => {
   it("shows the viewer their own units, base, explored ground and no enemies at the start (30 seeds)", () => {
     for (let seed = 1; seed <= 30; seed++) {
       const g = inTurn(seed);
+      const map = mapOfGame(g);
       for (const p of [0, 1] as PlayerIndex[]) {
         const v = strategicView(g, p);
         expect(v.viewer).toBe(p);
-        expect(v.map.id).toBe("medium-1");
+        expect(v.map).toBe(map);
+        expect(NEW_GAME_MAP_IDS).toContain(v.map.id);
         expect(v.base).toEqual(g.strategic!.bases[p]);
         expect(v.units.map((u) => ({ id: u.id, type: u.type, x: u.x, y: u.y, upright: u.upright, hits: 0 }))).toEqual(g.players[p].units);
         expect(v.units.every((u) => u.owner === p && u.current && u.state === "normal" && u.hp === u.maxHp)).toBe(true);
         expect(v.enemies).toEqual([]);
         for (const i of v.visible) expect(v.explored.has(i)).toBe(true);
-        for (const i of squaresOfRect({ ...v.base, ...BASE_GRID }, medium)) expect(v.explored.has(i)).toBe(true);
+        for (const i of squaresOfRect({ ...v.base, ...BASE_GRID }, map)) expect(v.explored.has(i)).toBe(true);
         expect(v.exploredPercent).toBeGreaterThan(0);
         expect(v.exploredPercent).toBeLessThan(100);
-        expect(v.exploredPercent).toBe(Math.round((100 * v.explored.size) / (medium.w * medium.h)));
+        expect(v.exploredPercent).toBe(Math.round((100 * v.explored.size) / (map.w * map.h)));
       }
     }
   });
@@ -356,22 +365,23 @@ describe("strategicView", () => {
   it("never lists an enemy that is neither in sight nor in lastSeen", () => {
     for (let seed = 31; seed <= 45; seed++) {
       const g = structuredClone(inTurn(seed));
+      const map = mapOfGame(g);
       // Scatter the enemy over the map, some in sight and some not.
       const rng = new Rng(seed);
       for (const u of g.players[1].units) {
-        u.x = rng.int(0, medium.w - 3);
-        u.y = rng.int(0, medium.h - 3);
+        u.x = rng.int(0, map.w - 3);
+        u.y = rng.int(0, map.h - 3);
       }
       const v = strategicView(g, 0);
       const lastSeen = g.strategic!.lastSeen[0];
       for (const e of v.enemies) {
         const live = g.players[1].units.find((u) => u.id === e.id)!;
-        if (e.current) expect(unitSeen(live, v.visible, medium)).toBe(true);
+        if (e.current) expect(unitSeen(live, v.visible, map)).toBe(true);
         else expect(lastSeen.some((s) => s.id === e.id)).toBe(true);
       }
       const listed = new Set(v.enemies.map((e) => e.id));
       for (const u of g.players[1].units) {
-        if (!listed.has(u.id)) expect(unitSeen(u, v.visible, medium)).toBe(false);
+        if (!listed.has(u.id)) expect(unitSeen(u, v.visible, map)).toBe(false);
       }
     }
   });
@@ -391,7 +401,7 @@ describe("strategicView", () => {
     expect(ended.strategic!.lastSeen[0]).toEqual([sighting]);
     const later = structuredClone(ended);
     later.phase = "turn";
-    later.players[1].units.find((u) => u.id === scout.id)!.x = medium.w - 2;
+    later.players[1].units.find((u) => u.id === scout.id)!.x = mapOfGame(g).w - 2;
     expect(strategicView(later, 0).enemies).toEqual([{ ...drawn, current: false, seenTurn: 1 }]);
     // A fresh sighting replaces the old record rather than adding a second one.
     const back = lookAround(g, 0);

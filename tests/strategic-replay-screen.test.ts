@@ -19,7 +19,7 @@ import {
 } from "../src/strategic/ui/replayScreen.ts";
 
 /** A Medium-sized map with no terrain. */
-const map: StrategicMap = { id: "test-40x20", name: "Test", size: "medium", w: 40, h: 20, terrain: [], baseSpots: [{ x: 2, y: 7 }] };
+const map: StrategicMap = { id: "test-40x20", name: "Test", size: "medium", w: 40, h: 20, terrain: [] };
 const W = 744;
 const H = 412;
 

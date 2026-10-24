@@ -26,7 +26,9 @@ import { SQ_NEAR, baseCamera, createMapView, footprintOf, type Camera, type MapV
  * The Strategic turn screen: the fog-of-war map on the left and a slim panel on the right with the
  * orders list. The player taps a tank, truck or artillery (on the map or in the list), then taps
  * where it should go, what it should shoot or where the shell should land. Every order acts at
- * once through the rules, and the whole screen is rebuilt from the new game.
+ * once through the rules, and the whole screen is rebuilt from the new game. A tap that only picks
+ * a unit, sets an aim or shows a tip redraws just the marks and the panel, in place: rebuilding a
+ * Large map with a hundred units for every pick made a slow phone wait about a tenth of a second.
  */
 
 /** The map fills the stage left of the panel (the panel is 176 px wide on this screen). */
@@ -42,8 +44,6 @@ export interface ScreenContext {
   menuButton(): HTMLElement;
   /** Saves the game and redraws the screen after a rules change. */
   setGame(game: Game): void;
-  /** Redraws the screen after a change that is only on the screen (a selection, an aim). */
-  render(): void;
   /** The in-game Menu overlay while it is open, or null. */
   overlay(): HTMLElement | null;
   /** The game is over and the player has seen the last shot: on to the results screen. */
@@ -142,10 +142,24 @@ export function describeShell(shot: MapShot, after: Game, me: PlayerIndex): stri
   return `Shell hit: ${hits.length} units${notes.length > 0 ? ` (${notes.join(", ")})` : ""}`;
 }
 
-/** The result line after a move. */
-export function describeMove(label: string, riders: number): string {
-  if (riders === 0) return `${label} moved`;
-  return `${label} moved with ${riders} ${riders === 1 ? "rider" : "riders"}`;
+/**
+ * The result line after a move. `stopped` when an enemy hidden in the fog stood in the way and the
+ * unit halted beside it (moveUnit); the enemy is in sight now, so naming it gives nothing away.
+ */
+export function describeMove(label: string, riders: number, stopped = false): string {
+  const withRiders = riders === 0 ? "" : ` with ${riders} ${riders === 1 ? "rider" : "riders"}`;
+  if (stopped) return `${label} stopped${withRiders}: enemy in the way`;
+  return `${label} moved${withRiders}`;
+}
+
+/** What the current pick allows, worked out again after every tap. */
+interface Picked {
+  row: OrderRow;
+  unit: DrawnUnit;
+  /** Top-left squares the unit can move to now (empty when it cannot move). */
+  reach: Point[];
+  /** Enemy unit ids a picked tank can shoot now. */
+  targets: string[];
 }
 
 export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
@@ -157,15 +171,22 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
   // Orders exist only while it is this player's turn and the game is on; afterwards the screen is read-only.
   const rows = view.orders;
   const rowOf = (id: string | null): OrderRow | undefined => rows.find((r) => r.unitId === id);
-  const selected = rowOf(selection.unitId);
-  if (!selected) {
-    selection.unitId = null;
-    selection.aim = null;
-  }
-  const selectedUnit = selected ? view.units.find((u) => u.id === selected.unitId) : undefined;
-  const reach = selected?.canMove ? reachableFor(game, selected.unitId) : [];
-  const targets = selected?.type === "tank" && selected.canFire ? tankTargets(game, selected.unitId) : [];
   const unitOf = (id: string): DrawnUnit | undefined => view.units.find((u) => u.id === id);
+
+  /** The picked unit and what it can do, or null; a pick that no longer has an order row is dropped. */
+  const picked = (): Picked | null => {
+    const row = rowOf(selection.unitId);
+    const unit = row ? unitOf(row.unitId) : undefined;
+    if (!row || !unit) {
+      selection.unitId = null;
+      selection.aim = null;
+      return null;
+    }
+    const reach = row.canMove ? reachableFor(game, row.unitId) : [];
+    const targets = row.type === "tank" && row.canFire ? tankTargets(game, row.unitId) : [];
+    return { row, unit, reach, targets };
+  };
+  let pick = picked();
 
   // The button reads "Whole map" when zoomed in and "Zoom to base" once the whole map is in view.
   const wholeLabel = (mv: MapView): string => (mv.isWhole() ? "Zoom to base" : "Whole map");
@@ -185,9 +206,22 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
   wholeButton.textContent = wholeLabel(mapView);
   wholeButton.addEventListener("click", () => (mapView.isWhole() ? mapView.focusBase() : mapView.fitWhole()));
 
+  /**
+   * A change on the screen only (a pick, an aim, a tip): the marks and the panel are drawn again in
+   * place while the map, the camera and everything under the marks stay as they are.
+   */
+  const refresh = (): void => {
+    pick = picked();
+    mapView.clearOverlay();
+    drawMarks();
+    const next = buildPanel();
+    panel.replaceWith(next);
+    panel = next;
+  };
+
   const refused = (reason: Failure): void => {
     selection.tip = ctx.problemTip(reason) || "Not now.";
-    ctx.render();
+    refresh();
   };
 
   /**
@@ -204,8 +238,8 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
   };
 
   const fireAt = (aim: Point): void => {
-    if (!selected) return;
-    const r = fireArtillery(game, selected.unitId, aim);
+    if (!pick) return;
+    const r = fireArtillery(game, pick.row.unitId, aim);
     if (!r.ok) return refused(r.reason);
     done(r.game, describeShell(r.shot, r.game, viewer), shooterView(r.shot).hits.some((h) => h.destroyed));
   };
@@ -225,84 +259,88 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
     // 1. One of your active units: pick it. An enemy in range of the picked tank: shoot it.
     if (hit && hit.owner === viewer && rowOf(hit.id)) {
       select(hit.id);
-      ctx.render();
+      refresh();
       return true;
     }
-    if (hit && hit.owner !== viewer && selected && targets.includes(hit.id)) {
-      const r = fireTank(game, selected.unitId, hit.id);
+    if (hit && hit.owner !== viewer && pick && pick.targets.includes(hit.id)) {
+      const r = fireTank(game, pick.row.unitId, hit.id);
       if (r.ok) done(r.game, describeTankShot(r.shot, r.game), r.shot.hits.some((h) => h.destroyed));
       else refused(r.reason);
       return true;
     }
     // 2. Reachable ground under a picked tank or truck: go there, and stay picked.
-    if (selected && selectedUnit && selected.canMove) {
-      const to = moveTarget(selectedUnit, reach, p);
+    if (pick && pick.row.canMove) {
+      const to = moveTarget(pick.unit, pick.reach, p);
       if (to) {
-        const r = moveUnit(game, selected.unitId, to);
+        const { row } = pick;
+        const r = moveUnit(game, row.unitId, to);
         if (r.ok) {
           const event = r.game.strategic?.events.at(-1);
           const riders = event?.kind === "move" ? event.riders.length : 0;
-          done(r.game, describeMove(orderLabel(selected.unitId, selected.type), riders), false);
+          const stopped = event?.kind === "move" && (event.to.x !== to.x || event.to.y !== to.y);
+          done(r.game, describeMove(orderLabel(row.unitId, row.type), riders, stopped), false);
         } else refused(r.reason);
         return true;
       }
     }
     // 3. A picked artillery: aim where the tap fell, or fire when the tap is on the aim already set.
-    if (selected && selected.type === "artillery" && selected.canFire) {
+    if (pick && pick.row.type === "artillery" && pick.row.canFire) {
       if (selection.aim && Math.hypot(p.x - selection.aim.x, p.y - selection.aim.y) <= AIM_TAP) {
         fireAt(selection.aim);
         return true;
       }
-      const problem = aimProblem(game, selected.unitId, p);
+      const problem = aimProblem(game, pick.row.unitId, p);
       if (problem === null) {
         selection.aim = p;
         selection.result = null;
       } else {
         selection.tip = problem === "too_close" ? ctx.problemTip("too_close") : "Aim on the paper.";
       }
-      ctx.render();
+      refresh();
       return true;
     }
     // 4. Anything else: nothing is picked any more. With nothing picked to begin with the tap
     // changes nothing, and the map is left alone so a second quick tap can zoom in on the spot.
-    if (!selected && !hadTip) return false;
+    if (!pick && !hadTip) return false;
     selection.unitId = null;
     selection.aim = null;
     selection.result = null;
-    ctx.render();
+    refresh();
     return true;
   };
 
-  // The overlay is lost when the map is rebuilt, so it is drawn again from the selection every time.
-  if (selected && selectedUnit) {
-    if (reach.length > 0) mapView.markSquares(reach.flatMap((tl) => squaresOf(footprintAt(selectedUnit, tl.x, tl.y))), "strategic-reach");
+  /** The marks for the current pick: where it can go, what it can shoot, the aim, and the pick itself. */
+  const drawMarks = (): void => {
+    if (!pick) return;
+    const { row, unit, reach, targets } = pick;
+    if (reach.length > 0) mapView.markSquares(reach.flatMap((tl) => squaresOf(footprintAt(unit, tl.x, tl.y))), "strategic-reach");
     for (const id of targets) {
       const enemy = view.enemies.find((u) => u.id === id && u.current);
       if (enemy) mapView.markRect(footprintOf(enemy), "strategic-target");
     }
-    if (selected.type === "artillery" && selected.canFire) {
-      mapView.markRect(footprintOf(selectedUnit), "strategic-minrange", ARTILLERY_MIN_RANGE);
-      if (selection.aim) mapView.markAim(selection.aim, shakeFor(game, selection.unitId ?? "", selection.aim));
+    if (row.type === "artillery" && row.canFire) {
+      mapView.markRect(footprintOf(unit), "strategic-minrange", ARTILLERY_MIN_RANGE);
+      if (selection.aim) mapView.markAim(selection.aim, shakeFor(game, row.unitId, selection.aim));
     }
-    mapView.markRect(footprintOf(selectedUnit), "strategic-selected");
-    if (selected.type === "truck" && (selected.riders ?? 0) > 0) mapView.overlay.append(ridersLabel(footprintOf(selectedUnit), selected.riders as number));
-  }
+    mapView.markRect(footprintOf(unit), "strategic-selected");
+    if (row.type === "truck" && (row.riders ?? 0) > 0) mapView.overlay.append(ridersLabel(footprintOf(unit), row.riders as number));
+  };
 
   const orderRow = (row: OrderRow): HTMLElement => {
-    const picked = row.unitId === selection.unitId;
+    const isPicked = row.unitId === selection.unitId;
     const moveState = row.type === "artillery" ? ["Stay", "off"] : row.moved ? ["Moved", "done"] : row.canMove ? ["Move", "on"] : ["Stuck", "off"];
     const fireState = row.type === "truck" ? ["—", "off"] : row.fired ? ["Fired", "done"] : row.canFire ? ["Fire", "on"] : ["No target", "off"];
     return el(
       "button",
       {
-        class: `order-row${picked ? " selected" : ""}`,
+        class: `order-row${isPicked ? " selected" : ""}`,
         "data-testid": `order-${row.unitId}`,
-        "aria-pressed": picked ? "true" : "false",
+        "aria-pressed": isPicked ? "true" : "false",
         onclick: () => {
           select(row.unitId);
           const u = unitOf(row.unitId);
           if (u) mapView.centreOn(centreOf(footprintOf(u)));
-          ctx.render();
+          refresh();
         },
       },
       el("span", { class: "order-name" }, orderLabel(row.unitId, row.type)),
@@ -318,55 +356,62 @@ export function strategicScreen(game: Game, ctx: ScreenContext): HTMLElement {
 
   const infantry = view.units.filter((u) => u.type === "infantry" && u.state !== "destroyed").length;
   const name = game.players[viewer].name;
-  const showFire = !!selected && selected.type === "artillery" && selected.canFire && !!selection.aim;
-  const line = selection.tip ?? (showFire ? null : selection.result);
-  // The panel has two moods, so that everything always fits above the buttons: with nothing picked
-  // it tells the story (the whole report, the infantry line); with a unit picked it is about the
-  // order (the report's first line only, the result or tip, and Fire).
-  const report = selected ? view.report.slice(0, 1) : view.report;
 
-  const panel = el(
-    "div",
-    { class: "panel" },
-    el("div", { class: "menu-row" }, ctx.menuButton(), wholeButton),
-    el("div", { class: `panel-name${name.length > 13 ? " long" : ""}`, "data-testid": "shooter" }, name),
-    el(
+  /** The side panel for the current pick. */
+  const buildPanel = (): HTMLElement => {
+    const showFire = !!pick && pick.row.type === "artillery" && pick.row.canFire && !!selection.aim;
+    const line = selection.tip ?? (showFire ? null : selection.result);
+    // The panel has two moods, so that everything always fits above the buttons: with nothing picked
+    // it tells the story (the whole report, the infantry line); with a unit picked it is about the
+    // order (the report's first line only, the result or tip, and Fire).
+    const report = pick ? view.report.slice(0, 1) : view.report;
+    return el(
       "div",
-      { class: "panel-sub" },
-      el("span", { "data-testid": "turn" }, `Turn ${view.turnNumber}`),
-      " · ",
-      el("span", { "data-testid": "explored" }, `Explored ${view.exploredPercent}%`),
-    ),
-    report.length > 0 &&
+      { class: "panel" },
+      el("div", { class: "menu-row" }, ctx.menuButton(), wholeButton),
+      el("div", { class: `panel-name${name.length > 13 ? " long" : ""}`, "data-testid": "shooter" }, name),
       el(
         "div",
-        { class: `report${selected ? " brief" : ""}`, "data-testid": "report" },
-        report.map((t) => el("p", { class: t.startsWith("Lost:") ? "wrap" : undefined }, t)),
+        { class: "panel-sub" },
+        el("span", { "data-testid": "turn" }, `Turn ${view.turnNumber}`),
+        " · ",
+        el("span", { "data-testid": "explored" }, `Explored ${view.exploredPercent}%`),
       ),
-    el("div", { class: "rule" }),
-    !view.over &&
-      (rows.length > 0
-        ? el("div", { class: "orders", "data-testid": "orders" }, el("div", { class: "orders-title" }, "Orders"), rows.map(orderRow))
-        : el("p", { class: "strategic-line soft", "data-testid": "orders-empty" }, "No units left to order.")),
-    !view.over && !selected && el("p", { class: "strategic-line soft", "data-testid": "infantry-note" }, `${infantry} infantry act on their own.`),
-    line && el("p", { class: `result${selection.tip ? " tip" : ""}`, "data-testid": "result" }, line),
-    showFire && el("button", { class: "btn danger", "data-testid": "fire", onclick: () => selection.aim && fireAt(selection.aim) }, "Fire"),
-    el("div", { class: "spacer" }),
-    view.over
-      ? el("button", { class: "btn primary", "data-testid": "see-results", onclick: () => ctx.showResults() }, "See results")
-      : el(
-          "button",
-          {
-            class: "btn primary",
-            "data-testid": "end-turn",
-            onclick: () => {
-              const r = endStrategicTurn(game);
-              if (r.ok) ctx.setGame(r.game);
-            },
-          },
-          "End turn",
+      report.length > 0 &&
+        el(
+          "div",
+          { class: `report${pick ? " brief" : ""}`, "data-testid": "report" },
+          report.map((t) => el("p", { class: t.startsWith("Lost:") ? "wrap" : undefined }, t)),
         ),
-  );
+      el("div", { class: "rule" }),
+      !view.over &&
+        (rows.length > 0
+          ? el("div", { class: "orders", "data-testid": "orders" }, el("div", { class: "orders-title" }, "Orders"), rows.map(orderRow))
+          : el("p", { class: "strategic-line soft", "data-testid": "orders-empty" }, "No units left to order.")),
+      !view.over && !pick && el("p", { class: "strategic-line soft", "data-testid": "infantry-note" }, `${infantry} infantry act on their own.`),
+      line && el("p", { class: `result${selection.tip ? " tip" : ""}`, "data-testid": "result" }, line),
+      showFire && el("button", { class: "btn danger", "data-testid": "fire", onclick: () => selection.aim && fireAt(selection.aim) }, "Fire"),
+      el("div", { class: "spacer" }),
+      view.over
+        ? el("button", { class: "btn primary", "data-testid": "see-results", onclick: () => ctx.showResults() }, "See results")
+        : el(
+            "button",
+            {
+              class: "btn primary",
+              "data-testid": "end-turn",
+              onclick: () => {
+                const r = endStrategicTurn(game);
+                if (r.ok) ctx.setGame(r.game);
+              },
+            },
+            "End turn",
+          ),
+    );
+  };
+
+  // The overlay is lost when the map is rebuilt, so it is drawn again from the selection every time.
+  drawMarks();
+  let panel = buildPanel();
 
   // The game ended on this turn: only the attacker can be looking, but the loser's line is here for safety.
   const banner =

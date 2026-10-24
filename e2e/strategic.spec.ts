@@ -4,6 +4,7 @@ import { confirmHandoff, createGame, finishBuild, randomLayout, rectOf, type Gam
 import {
   BASE_GRID,
   HP,
+  NEW_GAME_MAP_IDS,
   aimProblem,
   decodeExplored,
   distanceToRect,
@@ -23,6 +24,7 @@ import {
   tankTargets,
   unitSeen,
   unitTracks,
+  validBaseSpots,
   visibleSquares,
 } from "../src/strategic/rules/index.ts";
 import {
@@ -37,8 +39,7 @@ import {
   turnOnLargeText,
 } from "./helpers.ts";
 
-/** The Medium map and the Strategic base, in squares (see src/strategic/rules). */
-const MAP = { w: 40, h: 20 };
+/** The Strategic base, in squares (see src/strategic/rules). */
 const BASE = { w: 12, h: 6 };
 /** World units per square in the map's SVG. */
 const SQ_NEAR = 38;
@@ -93,24 +94,27 @@ const onAUnit = (units: readonly Unit[], p: { x: number; y: number }): boolean =
     return sq.x >= r.x && sq.x < r.x + r.w && sq.y >= r.y && sq.y < r.y + r.h;
   });
 
+/** The size of the map a game is played on: a new game draws one of the Large maps at random. */
+const mapSize = (g: Game): { w: number; h: number } => mapOf(g.strategic?.map);
+
 /** The way from a unit's centre toward the middle of the map, as a unit vector. */
-function towardCentre(u: Unit): { x: number; y: number } {
+function towardCentre(u: Unit, map: { w: number; h: number }): { x: number; y: number } {
   const c = centreOfUnit(u);
-  const dx = MAP.w / 2 - c.x;
-  const dy = MAP.h / 2 - c.y;
+  const dx = map.w / 2 - c.x;
+  const dy = map.h / 2 - c.y;
   const d = Math.hypot(dx, dy) || 1;
   return { x: dx / d, y: dy / d };
 }
 
 /** An empty point one to three squares from an artillery piece: too close for a shell, with nothing to pick there. */
-function tooClosePoint(units: readonly Unit[], gun: Unit): { x: number; y: number } {
+function tooClosePoint(units: readonly Unit[], gun: Unit, map: { w: number; h: number }): { x: number; y: number } {
   const c = centreOfUnit(gun);
   const rect = rectOf(gun);
   for (let angle = 0; angle < 2 * Math.PI; angle += Math.PI / 8) {
     for (let t = 2.5; t <= 3.5; t += 0.25) {
       const p = { x: c.x + t * Math.cos(angle), y: c.y + t * Math.sin(angle) };
       const d = distanceToRect(p.x, p.y, rect);
-      if (p.x < 0.5 || p.y < 0.5 || p.x > MAP.w - 0.5 || p.y > MAP.h - 0.5) continue;
+      if (p.x < 0.5 || p.y < 0.5 || p.x > map.w - 0.5 || p.y > map.h - 0.5) continue;
       if (d >= 1 && d < 2.9 && !onAUnit(units, p)) return p;
     }
   }
@@ -168,10 +172,11 @@ function shellOnAnasGround(g: Game): Game {
  * A game left on the black screen before Ana's turn, built through the rules (the replay rebuilds
  * the past from the saved events). Each round both tanks 1 head for the other base, until Ben's
  * comes into Ana's sight; on that turn it fires at one of her units in range, and his artillery
- * puts a shell on ground she knows. Seed 13: her replay opens with Ben's tank coming out of the fog.
+ * puts a shell on ground she knows. Seed 4 (The ridge): her replay opens with Ben's tank coming out of
+ * the fog.
  */
 function craftedHandover(): Game {
-  let g = firstTurn(13);
+  let g = firstTurn(4);
   const map = mapOf((g.strategic as NonNullable<Game["strategic"]>).map);
   for (let round = 0; round < 8; round++) {
     g = advance(pass(advance(g, "tank-1")), "tank-1");
@@ -250,19 +255,21 @@ test("a Strategic game: build both bases, land on the map in fog, and take turns
   await page.getByTestId("random-layout").click();
   await page.getByTestId("done").click();
 
-  // Both bases sit on the map, player 2's at player 1's spot turned half a circle, with every unit inside its base.
+  // Both bases sit on one of the Large maps, each at a spot drawn from the valid spots of its own
+  // half, with every unit inside its base.
   const built = await savedGame(page);
   expect(built.mode).toBe("strategic");
   expect(built.phase).toBe("handoff");
   const s = built.strategic!;
-  expect(s.map).toBe("medium-1");
-  expect(s.bases[1].x).toBe(MAP.w - BASE.w - s.bases[0].x);
-  expect(s.bases[1].y).toBe(MAP.h - BASE.h - s.bases[0].y);
+  expect(NEW_GAME_MAP_IDS).toContain(s.map);
+  const map = mapOf(s.map);
+  expect(map.size).toBe("large");
   for (const p of [0, 1] as const) {
+    expect(validBaseSpots(map, p)).toContainEqual(s.bases[p]);
     expect(built.players[p].units.length).toBe(ARMY_SIZE);
     for (const u of built.players[p].units) expect(insideBase(u, s.bases[p])).toBe(true);
   }
-  expect(s.explored[0].length).toBe(Math.ceil((MAP.w * MAP.h) / 4));
+  expect(s.explored[0].length).toBe(Math.ceil((map.w * map.h) / 4));
 
   // The first turns go straight to the turn screen: there is nothing yet to replay.
   await page.getByTestId("start").click();
@@ -304,6 +311,7 @@ test("a Strategic game: build both bases, land on the map in fog, and take turns
 test("Whole map shows the whole sheet and the mini-map jumps the view", async ({ page }) => {
   await startNewGame(page, 11, ["", ""], "strategic");
   await buildBothAndStart(page);
+  const map = mapSize(await savedGame(page));
 
   // The turn opens zoomed in on the base: 38 px per square, so the view is 744 / 38 squares wide.
   const atBase = await viewBox(page);
@@ -320,22 +328,29 @@ test("Whole map shows the whole sheet and the mini-map jumps the view", async ({
   // Whole map: the viewBox is as wide as the map, and the button offers the way back.
   await page.getByTestId("whole-map").click();
   const whole = await viewBox(page);
-  expect(Math.abs(whole[2]! - MAP.w * SQ_NEAR)).toBeLessThan(MAP.w * SQ_NEAR * 0.01);
+  expect(Math.abs(whole[2]! - map.w * SQ_NEAR)).toBeLessThan(map.w * SQ_NEAR * 0.01);
   await expect(page.getByTestId("whole-map")).toHaveText("Zoom to base");
+  // The mini-map would only repeat the whole map, over its corner: it steps aside until the view zooms in.
+  await expect(page.getByTestId("minimap")).toBeHidden();
   await page.getByTestId("whole-map").click();
   expect((await viewBox(page))[2]).toBeCloseTo(744, 0);
   await expect(page.getByTestId("whole-map")).toHaveText("Whole map");
+  await expect(page.getByTestId("minimap")).toBeVisible();
 });
 
 test("dragging the map past its edge and back follows the finger straight away", async ({ page }) => {
   await startNewGame(page, 11, ["", ""], "strategic");
   await buildBothAndStart(page);
 
-  // The turn opens with the map's left edge against the view's left edge (viewBox x 0), 38 px per square:
-  // one world unit per stage px, so the viewBox x reads directly as stage px of travel.
+  // The turn opens zoomed in on the base, 38 px per square: one world unit per stage px, so the viewBox
+  // x reads directly as stage px of travel. The base lands anywhere in its half, so a tap on the
+  // mini-map's left edge first brings the map's left edge against the view's left edge (viewBox x 0).
   const svg = (await page.getByTestId("strategic-map").boundingBox())!;
   const k = svg.width / 744; // the stage is CSS-scaled: screen px per stage px
+  const mini = (await page.getByTestId("minimap").boundingBox())!;
+  await page.mouse.click(mini.x + 2, mini.y + mini.height / 2);
   expect((await viewBox(page))[0]).toBe(0);
+  expect((await viewBox(page))[2]).toBeCloseTo(744, 0);
 
   // Pulling the map rightwards asks for paper past the edge: the map stays put.
   const x0 = svg.x + svg.width / 2;
@@ -394,10 +409,13 @@ test("orders: pick a tank from the list, tap reachable ground to move it, and th
   expect(infantryAt(atStart)).not.toEqual(infantryAt(before));
 
   // Picking the tank's row shows where it can go; tapping one of those squares moves it there.
+  // A pick redraws only the marks and the panel: the map itself is the same drawing as before.
+  const drawing = await page.getByTestId("strategic-map").elementHandle();
   await page.getByTestId("order-tank-1").click();
   await expect(page.getByTestId("order-tank-1")).toHaveClass(/selected/);
   await expect(page.locator(".strategic-reach")).toHaveCount(1);
   await expect(page.locator(".strategic-selected")).toHaveCount(1);
+  expect(await drawing!.evaluate((svg) => svg.isConnected)).toBe(true);
   const reach = reachableFor(atStart, "tank-1");
   expect(reach.length).toBeGreaterThan(0);
   const to = reach[reach.length - 1]!;
@@ -429,7 +447,8 @@ test("artillery: aim too close for a tip, aim further out and fire a shell that 
   const gun = g.players[0].units.find((u) => u.type === "artillery")!;
 
   // Within the minimum range: a tip, and nothing to fire.
-  const near = tooClosePoint(g.players[0].units, gun);
+  const map = mapSize(g);
+  const near = tooClosePoint(g.players[0].units, gun, map);
   await tapMap(page, near.x, near.y);
   await expect(page.getByTestId("result")).toContainText("Too close");
   await expect(page.getByTestId("fire")).toHaveCount(0);
@@ -437,11 +456,14 @@ test("artillery: aim too close for a tip, aim further out and fire a shell that 
 
   // Six squares toward the middle of the map: the aim shows and the Fire button appears.
   const c = centreOfUnit(gun);
-  const dir = towardCentre(gun);
+  const dir = towardCentre(gun, map);
   const aim = { x: c.x + 6 * dir.x, y: c.y + 6 * dir.y };
   await tapMap(page, aim.x, aim.y);
   await expect(page.locator(".strategic-aim")).toHaveCount(1);
   await expect(page.getByTestId("fire")).toBeVisible();
+  // The dashed ring shows how far this shell may drift.
+  const ring = Number(await page.locator(".strategic-aim-shake").getAttribute("r")) / SQ_NEAR;
+  expect(ring).toBeCloseTo(shakeRadius(distanceToRect(aim.x, aim.y, rectOf(gun))), 1);
   await page.getByTestId("fire").click();
 
   const after = await savedGame(page);
@@ -450,10 +472,11 @@ test("artillery: aim too close for a tip, aim further out and fire a shell that 
   expect(shot.by).toBe(0);
   expect(shot.weapon).toBe("shell");
   expect(Math.hypot(shot.aim.x - aim.x, shot.aim.y - aim.y)).toBeLessThan(0.15);
-  // The shake grows with the range: this aim is about six squares out, so a little over two squares.
+  // The drift grows a little with the range: this aim is about five squares from the gun's edge, so
+  // a little under a square.
   const shake = shakeRadius(distanceToRect(shot.aim.x, shot.aim.y, rectOf(gun)));
-  expect(shake).toBeGreaterThan(1.5);
-  expect(shake).toBeLessThan(3.5);
+  expect(shake).toBeGreaterThan(0.75);
+  expect(shake).toBeLessThan(1);
   expect(Math.hypot(shot.x - shot.aim.x, shot.y - shot.aim.y)).toBeLessThanOrEqual(shake + 0.01);
   expect(after.strategic!.orders["artillery-1"]?.fired).toBe(true);
   await expect(page.getByTestId("order-artillery-1")).toContainText("Fired");
@@ -593,9 +616,10 @@ test("results: every unit's track on the revealed map, a Hits column, Save image
   const crafted = craftedWin(3);
   await winWithTank1(page, crafted);
 
-  // The dotted tracks of every unit that moved, with the legend.
+  // The dotted tracks of every unit that moved, with the legend, and the name of the map.
   await expect(page.locator(".strategic-reveal path.strategic-track")).toHaveCount(unitTracks(crafted).length);
   await expect(page.getByTestId("reveal-legend")).toContainText("where units went");
+  await expect(page.getByTestId("reveal-map-name")).toHaveText(`Map: ${mapOf(crafted.strategic!.map).name}`);
 
   // Hits between Shots and Explored: Ana's one shot hurt the fort, Ben never fired.
   await expect(page.locator("[data-testid=reveal-stats] th")).toHaveText(["", "Turns", "Lost", "Shots", "Hits", "Explored"]);
@@ -612,7 +636,7 @@ test("results: every unit's track on the revealed map, a Hits column, Save image
 
   // Everything fits the stage, the four buttons included.
   const stage = (await page.locator("#stage").boundingBox())!;
-  for (const id of ["play-again", "main-menu", "save-image", "watch-match", "reveal-stats"]) {
+  for (const id of ["play-again", "main-menu", "save-image", "watch-match", "reveal-stats", "reveal-map-name"]) {
     const box = (await page.getByTestId(id).boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 0.5);
     expect(box.y + box.height).toBeLessThanOrEqual(stage.y + stage.height + 0.5);
@@ -713,12 +737,12 @@ test("larger text still fits the Strategic panels", async ({ page }) => {
   const g = await savedGame(page);
   const gun = g.players[0].units.find((u) => u.type === "artillery")!;
   const c = centreOfUnit(gun);
-  const dir = towardCentre(gun);
+  const dir = towardCentre(gun, mapSize(g));
   await tapMap(page, c.x + 6 * dir.x, c.y + 6 * dir.y);
   await expect(page.getByTestId("fire")).toBeVisible();
   expect(await panelFits(page)).toBeLessThanOrEqual(0);
   // The fullest the panel gets: the Fire button and a two-line tip at once.
-  const near = tooClosePoint(g.players[0].units, gun);
+  const near = tooClosePoint(g.players[0].units, gun, mapSize(g));
   await tapMap(page, near.x, near.y);
   await expect(page.getByTestId("result")).toContainText("Too close");
   await expect(page.getByTestId("fire")).toBeVisible();

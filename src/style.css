@@ -1296,8 +1296,9 @@ body.large-text .strategic-note {
   padding: 4px 0 0;
 }
 
-/* The headline in the middle; the tracks legend at the right, in line with the paper's right edge
-   (a 40 x 20 map fitted to 744 x 300 is 600 wide, so it ends 160 px from the stage's edge). */
+/* The headline in the middle; the map's name at the left and the tracks legend at the right, in line
+   with the paper's edges (a 60 x 30 or 40 x 20 map fitted to 744 x 300 is 600 wide, so it starts and
+   ends 160 px from the stage's edges). */
 .strategic-reveal .reveal-head {
   position: relative;
 }
@@ -1308,8 +1309,8 @@ body.large-text .strategic-note {
   line-height: 1.1;
 }
 
-/* With the legend, the headline keeps to the middle 320 px so even a 20-letter name never runs into it. */
-.strategic-reveal .with-legend .winner {
+/* The headline keeps to the middle 320 px so even a 20-letter name never runs into the map name or the legend. */
+.strategic-reveal .reveal-head .winner {
   padding: 0 300px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1319,6 +1320,17 @@ body.large-text .strategic-note {
 .strategic-reveal .reveal-legend {
   position: absolute;
   right: 160px;
+  bottom: 3px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.strategic-reveal .reveal-map-name {
+  position: absolute;
+  left: 160px;
   bottom: 3px;
   margin: 0;
   font-size: 13px;
@@ -1423,6 +1435,7 @@ body.large-text .strategic-reveal .summary {
   font-size: 16px;
 }
 
-body.large-text .strategic-reveal .reveal-legend {
+body.large-text .strategic-reveal .reveal-legend,
+body.large-text .strategic-reveal .reveal-map-name {
   font-size: 15px;
 }

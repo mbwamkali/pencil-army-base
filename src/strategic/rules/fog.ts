@@ -50,6 +50,21 @@ export function unitSeen(unit: Pick<Unit, "type" | "x" | "y" | "upright">, visib
 }
 
 /**
+ * The units a player knows are standing on the map right now: all of their own, and the living
+ * enemy units in sight (`visible` is what the player's units see now, worked out here when not
+ * given). Plans go round only these, the blue reach of a picked unit and an infantry's route alike:
+ * an enemy in the fog left in the way would show as a gap in the plan and give away a unit the
+ * player cannot see, the hidden enemy fort among them.
+ */
+export function knownUnits(game: Game, viewer: PlayerIndex, visible?: ReadonlySet<number>): Unit[] {
+  const map = mapOf(game.strategic?.map);
+  const own = game.players[viewer].units;
+  const sight = visible ?? visibleSquares(own, map);
+  const enemy: PlayerIndex = viewer === 0 ? 1 : 0;
+  return [...own, ...game.players[enemy].units.filter((u) => isAlive(u) && unitSeen(u, sight, map))];
+}
+
+/**
  * Explored squares packed as a hex string: 4 squares per character, square i in character
  * floor(i / 4), bit i % 4 (least significant first). Short enough to live in the saved game.
  */
@@ -110,8 +125,14 @@ export function noteSightings(
  */
 export function lookAround(game: Game, viewer: PlayerIndex): Game {
   const g = structuredClone(game);
+  noteWhatIsSeen(g, viewer);
+  return g;
+}
+
+/** lookAround, in place on a game the caller owns (the start of a turn works on its own copy). */
+export function noteWhatIsSeen(g: Game, viewer: PlayerIndex): void {
   const s = g.strategic;
-  if (!s) return g;
+  if (!s) return;
   const map = mapOf(s.map);
   const visible = visibleSquares(g.players[viewer].units, map);
   const explored = decodeExplored(s.explored[viewer], map);
@@ -119,5 +140,4 @@ export function lookAround(game: Game, viewer: PlayerIndex): Game {
   s.explored[viewer] = encodeExplored(explored, map);
   const enemy: PlayerIndex = viewer === 0 ? 1 : 0;
   s.lastSeen[viewer] = noteSightings(s.lastSeen[viewer], g.players[enemy].units, visible, map, g.turn);
-  return g;
 }
