@@ -59,8 +59,9 @@ test("a Skirmish army has 7 units, and its smaller board fills the same space as
 test("a Skirmish game is won by destroying the fort, tank and artillery, with points shown", async ({ page }) => {
   await startNewGame(page, 3, ["", ""], "skirmish");
   await buildBothAndStart(page);
-  await expect(page.getByTestId("counter-you")).toContainText("3 / 3");
-  await expect(page.getByTestId("points")).toContainText("0 : 0");
+  await expect(page.getByTestId("counter-you")).toContainText("3/3");
+  await expect(page.getByTestId("points-you")).toHaveText("0");
+  await expect(page.getByTestId("points-enemy")).toHaveText("0");
   expect(await panelFits(page)).toBeLessThanOrEqual(0);
   const hunter = (await savedGame(page)).current;
   await huntCore(page);
@@ -99,7 +100,7 @@ for (const mode of ["battle", "score"] as ModeName[]) {
     await expect(page.getByText("Place 17 more")).toBeVisible();
     expect(await panelFits(page)).toBeLessThanOrEqual(0);
     await buildBothAndStart(page);
-    await expect(page.getByTestId("counter-you")).toContainText(mode === "score" ? "13 / 13" : "7 / 7");
+    await expect(page.getByTestId("counter-you")).toContainText(mode === "score" ? "13/13" : "7/7");
     await expect(page.getByTestId("points")).toBeVisible();
     expect(await panelFits(page)).toBeLessThanOrEqual(0);
     expect((await savedGame(page)).mode).toBe(mode);

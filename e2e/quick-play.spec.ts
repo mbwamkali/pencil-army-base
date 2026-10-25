@@ -32,6 +32,19 @@ test("tap a unit in the tray, then tap the map to place it; tap it again to put 
   expect((await savedGame(page)).players[0].units).toHaveLength(units.length);
 });
 
+test("the tray shows unit art and counts, and holding a tile shows its name", async ({ page }) => {
+  await startNewGame(page, 7);
+  await expect(page.getByTestId("tray-tank")).toHaveText(/×3/);
+  await expect(page.getByTestId("tray-name-tank")).toBeHidden();
+  const box = (await page.getByTestId("tray-tank").boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.getByTestId("tray-name-tank")).toBeVisible();
+  await expect(page.getByTestId("tray-name-tank")).toHaveText("Tank");
+  await page.mouse.up();
+  await expect(page.getByTestId("tray-name-tank")).toBeHidden();
+});
+
 test("each turn opens on the enemy base, after a short look at the last hit on your own base", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);

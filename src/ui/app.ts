@@ -651,6 +651,13 @@ function buildScreen(game: Game): HTMLElement {
     if (ui.placing && id) startDrag(e, id, ui.placing, false, board.svg, true);
   });
 
+  // Holding a tile shows its name; it hides when the finger lifts anywhere, since a drag can end over the board.
+  const showTrayName = (tile: Element) => {
+    tile.classList.add("named");
+    const hide = () => tile.classList.remove("named");
+    window.addEventListener("pointerup", hide, { once: true });
+    window.addEventListener("pointercancel", hide, { once: true });
+  };
   const placedCount = (t: UnitType) => units.filter((u) => u.type === t).length;
   const tray = el(
     "div",
@@ -665,12 +672,16 @@ function buildScreen(game: Game): HTMLElement {
           "data-testid": `tray-${type}`,
           "data-left": left,
           "aria-pressed": ui.placing === type ? "true" : "false",
+          "aria-label": `${UNIT_LABEL[type]}, ${left} left`,
           onpointerdown: (e: PointerEvent) => {
+            showTrayName(e.currentTarget as Element);
             if (nextId) startDrag(e, nextId, type, false, e.currentTarget as Element);
           },
         },
-        el("img", { src: unitArt(type, "normal"), alt: "", draggable: "false" }),
-        el("span", {}, `${UNIT_LABEL[type]} `, el("b", {}, `×${left}`)),
+        el("img", { src: unitArt(type, "normal"), alt: UNIT_LABEL[type], draggable: "false" }),
+        el("b", {}, `×${left}`),
+        // The name shows while the tile is held, or hovered with a mouse.
+        el("span", { class: "tray-name", "data-testid": `tray-name-${type}` }, UNIT_LABEL[type]),
       );
     }),
   );
@@ -680,7 +691,7 @@ function buildScreen(game: Game): HTMLElement {
   const sub = ui.tip
     ? el("div", { class: "panel-sub tip", "data-testid": "tip" }, ui.tip)
     : ui.placing
-    ? el("div", { class: "panel-sub", "data-testid": "placing" }, `Tap the map to place: ${UNIT_LABEL[ui.placing]}`)
+    ? el("div", { class: "panel-sub", "data-testid": "placing" }, `Tap the map: ${UNIT_LABEL[ui.placing]}`)
     : el("div", { class: "panel-sub" }, complete ? "Build your base" : `Place ${slots.length - units.length} more`);
   const panel = el(
     "div",
@@ -811,7 +822,7 @@ function battleScreen(game: Game): HTMLElement {
       statusLines.push(el("b", { "data-testid": "result", class: justFired.outcome === "wall" ? "blocked" : undefined }, describeShot(justFired)));
       if (ui.wallTip) statusLines.push(el("span", { class: "wall-tip", "data-testid": "wall-tip" }, shieldIcon(), WALL_TIP));
     } else {
-      statusLines.push(ui.aim ? "Tap Fire, or tap the same spot again." : "Tap the paper to aim.");
+      statusLines.push(ui.aim ? "Tap Fire, or tap again." : "Tap the paper to aim.");
     }
   }
 
@@ -889,22 +900,30 @@ function battleScreen(game: Game): HTMLElement {
   // Skirmish and Battle: the counter shows what is left to destroy to win (fort, tanks, artillery), with infantry beneath it.
   // Score attack ends early only when a whole army is gone, so it counts every fighting unit.
   const byScore = mode.win === "score";
-  const counter = (label: string, units: readonly Unit[], which: "you" | "enemy") =>
+  // A small scoreboard: a column per side (tap one for its breakdown), with icons down the left naming each row.
+  const column = (label: string, side: typeof mine, which: "you" | "enemy") =>
     el(
       "button",
       { class: "counter", "data-testid": `counter-${which}`, onclick: () => ((ui.popover = ui.popover === which ? null : which), render()) },
-      el("span", {}, label),
-      el("b", {}, byScore ? `${unitsLeft(units).total} / ${fightingCount(mode)}` : `${coreLeft(units)} / ${coreCount(mode)}`),
-      !byScore && el("small", { "data-testid": `infantry-${which}` }, `+ ${unitsLeft(units).byType.infantry} infantry`),
+      el("span", { class: "score-head" }, label),
+      el("b", {}, byScore ? `${unitsLeft(side.units).total}/${fightingCount(mode)}` : `${coreLeft(side.units)}/${coreCount(mode)}`),
+      !byScore && el("span", { "data-testid": `infantry-${which}` }, unitsLeft(side.units).byType.infantry),
+      el("span", { "data-testid": `points-${which}` }, scoreOf(side)),
     );
-
-  const myPoints = scoreOf(mine);
-  const foePoints = scoreOf(theirs);
-  const points = el(
+  const rowIcon = (src: string, label: string) => el("img", { src, alt: label, title: label, draggable: "false" });
+  const scoreboard = el(
     "div",
-    { class: "points", "data-testid": "points" },
-    el("span", {}, "Points"),
-    el("b", {}, el("span", { "data-testid": "points-you" }, myPoints), " : ", el("span", { "data-testid": "points-enemy" }, foePoints)),
+    { class: `score${byScore ? " by-score" : ""}`, "data-testid": "points" },
+    el(
+      "div",
+      { class: "score-keys", "aria-hidden": "true" },
+      el("span", { class: "score-head" }),
+      rowIcon(unitArt("fort", "normal"), byScore ? "Units left" : "Fort, tanks and artillery left"),
+      !byScore && rowIcon(unitArt("infantry", "normal"), "Infantry left"),
+      el("span", {}, "pts"),
+    ),
+    column("You", mine, "you"),
+    column("Enemy", theirs, "enemy"),
   );
   const shotsEach = mode.shotsEach;
   const shotNumber = Math.min(mine.shots.length + (game.shotFired ? 0 : 1), shotsEach ?? Infinity);
@@ -949,9 +968,7 @@ function battleScreen(game: Game): HTMLElement {
     // Only Score attack needs a count on screen; elsewhere the room goes to the shot result.
     shotsEach && el("div", { class: "panel-sub", "data-testid": "turn" }, sub),
     el("div", { class: "rule" }),
-    counter("You", mine.units, "you"),
-    counter("Enemy", theirs.units, "enemy"),
-    points,
+    scoreboard,
     el("div", { class: "rule" }),
     status,
     el("div", { class: "spacer" }),

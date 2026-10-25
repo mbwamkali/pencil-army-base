@@ -27,6 +27,9 @@ body {
   -webkit-user-select: none;
   overscroll-behavior: none;
   touch-action: none;
+  /* The game has its own Larger text setting, so the phone's text size must not overflow the fixed panel. */
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body[data-screen="handoff"] {
@@ -446,19 +449,56 @@ h2 {
   color: #fff;
 }
 
+/* Turn scoreboard: icons down the left naming each row, then a column per side. */
+.score {
+  display: grid;
+  grid-template-columns: 30px 1fr 1fr;
+  gap: 2px;
+}
+
+.score-keys,
+.counter {
+  display: grid;
+  grid-template-rows: 20px 28px 24px 24px;
+  align-items: center;
+  justify-items: center;
+}
+
+.score.by-score .score-keys,
+.score.by-score .counter {
+  grid-template-rows: 20px 28px 24px;
+}
+
+.score-keys {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.score-keys img {
+  width: 22px;
+  height: 22px;
+}
+
 .counter {
   font: inherit;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 1px 4px;
+  padding: 0;
   min-height: 0;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: var(--ink);
   font-size: 17px;
+  line-height: 1;
   cursor: pointer;
+}
+
+.counter:active {
+  background: #fff;
+}
+
+.score-head {
+  font-size: 15px;
+  color: var(--ink-soft);
 }
 
 .counter b {
@@ -549,34 +589,33 @@ h2 {
   font-size: 18px;
 }
 
-/* Build tray */
+/* Build tray: a tile per unit type with its art and how many are left. The name shows while a tile is held or hovered. */
 .tray {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 0 1 auto;
-  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .tray-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1 1 38px;
-  min-height: 32px;
-  max-height: 38px;
-  padding: 0 4px;
+  justify-content: center;
+  gap: 2px;
+  height: 46px;
+  padding: 0 2px;
   border: 2px dashed var(--edge);
   border-radius: 8px;
   background: #fff;
-  font-size: 16px;
+  font-size: 18px;
   touch-action: none;
   cursor: grab;
 }
 
 .tray-item img {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   pointer-events: none;
 }
 
@@ -587,6 +626,33 @@ h2 {
 
 .tray-item b {
   font-weight: normal;
+}
+
+/* The name pops out to the left, over the edge of the board, so the finger holding the tile doesn't cover it. */
+.tray-name {
+  display: none;
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 2px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.tray-item.named .tray-name {
+  display: block;
+}
+
+@media (hover: hover) {
+  .tray-item:hover .tray-name {
+    display: block;
+  }
 }
 
 /* Picked for tap-to-place: darker, with a solid edge. */
@@ -667,19 +733,7 @@ h2 {
   min-height: 44px;
 }
 
-.points {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 0 4px;
-  font-size: 17px;
-  color: var(--ink);
-}
 
-.points b {
-  font-size: 22px;
-  font-weight: normal;
-}
 
 .menu-btn {
   min-height: 34px;
@@ -789,15 +843,18 @@ body.large-text .tip,
 body.large-text .status,
 body.large-text .tray-item,
 body.large-text .toggle-btn,
-body.large-text .counter,
-body.large-text .points {
+body.large-text .counter {
   font-size: 19px;
 }
 
 body.large-text .status b,
-body.large-text .counter b,
-body.large-text .points b {
+body.large-text .counter b {
   font-size: 23px;
+}
+
+body.large-text .score-head,
+body.large-text .score-keys {
+  font-size: 17px;
 }
 
 .menu-links {
@@ -817,14 +874,6 @@ body.large-text .points b {
   color: var(--ink-soft);
 }
 
-.counter small {
-  width: 100%;
-  margin-top: -4px;
-  text-align: right;
-  font-size: 13px;
-  line-height: 1;
-  color: var(--ink-soft);
-}
 
 .menu-row {
   display: flex;
@@ -871,16 +920,6 @@ body.large-text .points b {
   font-size: 15px;
 }
 
-
-.counter b,
-.points b {
-  font-size: 20px;
-}
-
-body.large-text .counter b,
-body.large-text .points b {
-  font-size: 21px;
-}
 
 body.large-text .status {
   font-size: 17px;

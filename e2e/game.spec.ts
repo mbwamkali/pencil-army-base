@@ -113,9 +113,9 @@ test("the Enemy base view never shows an undamaged enemy unit", async ({ page })
 test("the counters show what is left to destroy, with infantry beneath, and drop as units die", async ({ page }) => {
   await startNewGame(page, 7);
   await buildBothAndStart(page);
-  await expect(page.getByTestId("counter-you")).toContainText("7 / 7");
-  await expect(page.getByTestId("counter-enemy")).toContainText("7 / 7");
-  await expect(page.getByTestId("infantry-enemy")).toHaveText("+ 6 infantry");
+  await expect(page.getByTestId("counter-you")).toContainText("7/7");
+  await expect(page.getByTestId("counter-enemy")).toContainText("7/7");
+  await expect(page.getByTestId("infantry-enemy")).toHaveText("6");
   const g = await savedGame(page);
   const foe = g.current === 0 ? 1 : 0;
   const tank = g.players[foe]!.units.find((u) => u.type === "tank")!;
@@ -131,8 +131,8 @@ test("the counters show what is left to destroy, with infantry beneath, and drop
   const core = units.filter((u) => ["tank", "artillery", "fort"].includes(u.type) && u.hits < (u.type === "fort" ? 2 : 1)).length;
   const infantry = units.filter((u) => u.type === "infantry" && u.hits < 1).length;
   expect(core).toBeLessThanOrEqual(result.startsWith("Destroyed") ? 6 : 7);
-  await expect(page.getByTestId("counter-enemy")).toContainText(`${core} / 7`);
-  await expect(page.getByTestId("infantry-enemy")).toHaveText(`+ ${infantry} infantry`);
+  await expect(page.getByTestId("counter-enemy")).toContainText(`${core}/7`);
+  await expect(page.getByTestId("infantry-enemy")).toHaveText(String(infantry));
   await page.getByTestId("counter-enemy").click();
   await expect(page.getByTestId("breakdown")).toContainText("Walls left");
 });
