@@ -266,3 +266,11 @@ test("the Menu button is also there during play, and the panel still fits", asyn
   await page.getByTestId("menu-confirm-new").click();
   await expect(page.getByTestId("setup")).toBeVisible();
 });
+
+test("a long player name stays on one line in the side panel", async ({ page }) => {
+  await startNewGame(page, 7, ["Commander Crosshatch", "Ana"]);
+  const name = page.getByTestId("builder");
+  await expect(name).toHaveText("Commander Crosshatch");
+  const fit = await name.evaluate((e) => ({ lines: Math.round(e.clientHeight / parseFloat(getComputedStyle(e).lineHeight)), over: e.scrollWidth - e.clientWidth }));
+  expect(fit).toEqual({ lines: 1, over: 0 });
+});

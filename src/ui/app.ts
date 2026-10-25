@@ -145,6 +145,9 @@ function seedFor(): number {
   return Math.floor(Math.random() * 2 ** 32);
 }
 
+/** The smallest a long name shrinks to; past that it ends in "…". */
+const MIN_NAME_PX = 13;
+
 export function render(): void {
   const root = stage();
   let screenName: string = ui.screen;
@@ -180,6 +183,21 @@ export function render(): void {
   }
   document.body.dataset.screen = screenName;
   root.replaceChildren(node);
+  fitNames(root);
+  // Until the pencil font loads the names measure in a fallback font, so fit them again once it has.
+  void document.fonts?.ready.then(() => fitNames(root));
+}
+
+/** Keeps the player's name in the side panel on one line, shrinking a long name a step at a time. */
+function fitNames(root: HTMLElement): void {
+  for (const name of root.querySelectorAll<HTMLElement>(".panel-name")) {
+    name.style.fontSize = "";
+    let size = parseFloat(getComputedStyle(name).fontSize);
+    while (name.scrollWidth > name.clientWidth && size > MIN_NAME_PX) {
+      size -= 1;
+      name.style.fontSize = `${size}px`;
+    }
+  }
 }
 
 /**

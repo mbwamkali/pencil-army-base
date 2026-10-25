@@ -392,7 +392,9 @@ h2 {
   font-size: 21px;
   line-height: 1.05;
   text-align: center;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .panel-sub {
