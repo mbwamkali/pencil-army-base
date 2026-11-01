@@ -17,6 +17,8 @@ public class MainActivity extends BridgeActivity {
             setRecentsScreenshotEnabled(false);
         }
         hideSystemBars();
+        // The phone's font size setting would enlarge every word and overflow the side panel; the game has its own Larger text option.
+        getBridge().getWebView().getSettings().setTextZoom(100);
     }
 
     @Override
